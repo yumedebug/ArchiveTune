@@ -32,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -119,14 +120,18 @@ fun LargeTitleHeader(
  * 使いたい値は [rememberTitleCollapse] で取る。
  *
  * @param visible [rememberTitleCollapse] の結果をそのまま渡す。
+ * @param leading 左端に置く操作（詳細画面の戻る矢印等）。`null` なら左は空けるだけ。
  * @param trailing 右端に置く操作。`null` なら右側は空けるだけ。
+ * @param containerColor 地色。詳細画面はアート由来の色を渡して背景と溶け合わせる。
  */
 @Composable
 fun PinnedTitleBar(
     title: String,
     visible: Boolean,
     modifier: Modifier = Modifier,
+    leading: (@Composable RowScope.() -> Unit)? = null,
     trailing: (@Composable RowScope.() -> Unit)? = null,
+    containerColor: Color? = null,
 ) {
     val palette = applePalette()
     val type = appleType()
@@ -144,7 +149,7 @@ fun PinnedTitleBar(
                 Modifier
                     .fillMaxWidth()
                     .windowInsetsPadding(windowInsets)
-                    .background(palette.background),
+                    .background(containerColor ?: palette.background),
         ) {
             Row(
                 modifier =
@@ -154,6 +159,10 @@ fun PinnedTitleBar(
                         .padding(horizontal = metrics.gutter.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (leading != null) {
+                    leading()
+                    Spacer(Modifier.width(metrics.xs.dp))
+                }
                 Text(
                     text = title,
                     style = type.headline,

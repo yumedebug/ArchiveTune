@@ -26,8 +26,10 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
@@ -70,6 +72,7 @@ data class NavigationTab(
  *
  * @param selectedRoute 現在選択されているルート。`null` で全タブ非選択。
  * @param onSelect タブが押されたとき。既に選択中のタブが再押された回数は数えない側で持つ。
+ * @param detachedTab カプセルの右に独立させるタブ。`null` ならカプセルのみ。
  */
 @Composable
 fun GlassNavigationBar(
@@ -77,13 +80,12 @@ fun GlassNavigationBar(
     selectedRoute: String?,
     onSelect: (NavigationTab) -> Unit,
     modifier: Modifier = Modifier,
+    detachedTab: NavigationTab? = null,
 ) {
-    val palette = applePalette()
-    val type = appleType()
     val metrics = appleMetrics()
     val shape = RoundedCornerShape(28.dp)
 
-    Box(
+    Row(
         modifier =
             modifier
                 .fillMaxWidth()
@@ -93,14 +95,17 @@ fun GlassNavigationBar(
                     ),
                 )
                 // ジェスチャバーのすぐ上に浮かせるためのわずかな隙間。
-                .padding(bottom = metrics.xs.dp),
-        contentAlignment = Alignment.Center,
+                .padding(bottom = metrics.xs.dp)
+                // ミニプレイヤーと同じく左右を浮かせて、全面に張り付かない面にする。
+                .padding(horizontal = metrics.md.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Surface(
             modifier =
                 Modifier
+                    .weight(1f)
                     .widthIn(max = 460.dp)
-                    .fillMaxWidth()
                     .height(metrics.navBarHeight.dp),
             shape = shape,
             color = Color.Transparent,
@@ -121,6 +126,61 @@ fun GlassNavigationBar(
                         )
                     }
                 }
+            }
+        }
+
+        if (detachedTab != null) {
+            Spacer(Modifier.width(metrics.sm.dp))
+            DetachedTabButton(
+                tab = detachedTab,
+                selected = detachedTab.route == selectedRoute,
+                onSelect = onSelect,
+            )
+        }
+    }
+}
+
+/**
+ * カプセルから外したタブ用の円形ガラスボタン。
+ *
+ * ラベルは入れない（円の中に押し込めると読み切れないため）。識別はアクセント色と
+ * アイコンに付いたアクセシビリティラベルで行う。
+ */
+@Composable
+private fun DetachedTabButton(
+    tab: NavigationTab,
+    selected: Boolean,
+    onSelect: (NavigationTab) -> Unit,
+) {
+    val palette = applePalette()
+    val metrics = appleMetrics()
+    val interactionSource = remember { MutableInteractionSource() }
+    val contentColor = if (selected) palette.accent else palette.labelSecondary
+
+    Surface(
+        modifier = Modifier.size(metrics.navBarHeight.dp),
+        shape = CircleShape,
+        color = Color.Transparent,
+        tonalElevation = 0.dp,
+        shadowElevation = 8.dp,
+    ) {
+        GlassSurface(shape = CircleShape) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                        ) { onSelect(tab) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(if (selected) tab.iconActive else tab.iconInactive),
+                    contentDescription = stringResource(tab.labelId),
+                    tint = contentColor,
+                    modifier = Modifier.size(24.dp),
+                )
             }
         }
     }

@@ -77,7 +77,7 @@ fun MiniPlayer(
     val type = appleType()
     val metrics = appleMetrics()
     val density = LocalDensity.current
-    val shape = RoundedCornerShape(18.dp)
+    val shape = RoundedCornerShape(20.dp)
 
     // スワイプによる横移動。しきい値を超えると曲が変わり、離すとばねで戻る。
     var rawOffsetPx by remember { mutableFloatStateOf(0f) }

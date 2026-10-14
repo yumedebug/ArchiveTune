@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.add
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -141,12 +142,17 @@ fun AppShell(
                     iconActive = R.drawable.library_filled,
                     route = Routes.Library,
                 ),
-                NavigationTab(
-                    labelId = R.string.search,
-                    iconInactive = R.drawable.search,
-                    iconActive = R.drawable.search,
-                    route = Routes.Search,
-                ),
+            )
+        }
+
+    // 検索はカプセルから外し、右へ独立した円形ボタンとして置く（iOS 26 の Apple Music の形）。
+    val searchTab =
+        remember {
+            NavigationTab(
+                labelId = R.string.search,
+                iconInactive = R.drawable.search,
+                iconActive = R.drawable.search,
+                route = Routes.Search,
             )
         }
 
@@ -265,10 +271,14 @@ fun AppShell(
                         .fillMaxWidth()
                         .zIndex(1f),
             ) {
-                MiniPlayer(onOpenPlayer = { navController.navigate(Routes.Player) })
+                MiniPlayer(
+                    modifier = Modifier.padding(horizontal = metrics.md.dp),
+                    onOpenPlayer = { navController.navigate(Routes.Player) },
+                )
                 GlassNavigationBar(
                     tabs = mainTabs,
                     selectedRoute = currentRoute,
+                    detachedTab = searchTab,
                     onSelect = { tab ->
                         if (tab.route == currentRoute) {
                             // 選択済みタブの再タップは一覧を先頭へ戻す。
