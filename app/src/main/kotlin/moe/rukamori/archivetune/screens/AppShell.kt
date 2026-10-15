@@ -94,8 +94,9 @@ fun AppShell(
 
     // 全画面プレイヤー・歌詞・キューでは下端の面を隠す。設定は通常画面として扱い、
     // ナビを残す（Apple の設定もシートではなく押した先の画面として扱う）。
+    // ログインも全画面で、WebView にナビやミニプレイヤーを重ねない。
     val immersive = currentRoute == Routes.Player || currentRoute == Routes.Lyrics ||
-        currentRoute == Routes.Queue
+        currentRoute == Routes.Queue || currentRoute == Routes.Login
 
     val systemBarBottomDp =
         with(density) { WindowInsets.systemBars.getBottom(density).toDp() }
@@ -222,7 +223,14 @@ fun AppShell(
                     QueueScreen(onBack = { navController.popBackStack() })
                 }
                 composable(Routes.Settings) {
-                    SettingsScreen(onBack = { navController.popBackStack() })
+                    SettingsScreen(
+                        onBack = { navController.popBackStack() },
+                        onSignIn = { navController.navigate(Routes.Login) },
+                    )
+                }
+
+                composable(Routes.Login) {
+                    LoginScreen(onBack = { navController.popBackStack() })
                 }
 
                 composable(Routes.OnlineSearch) {

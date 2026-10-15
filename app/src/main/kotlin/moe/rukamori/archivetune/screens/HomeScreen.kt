@@ -171,8 +171,9 @@ fun HomeScreen(
 
                         // サインインしていないときだけ中身が現れる。再生の入口を
                         // 設定に埋もれさせないため、ホームの先頭に置いておく。
+                        // 押すとアプリ内のログイン画面を開く（Cookie の貼り付けはしない）。
                         item(key = "signIn") {
-                            SignInPrompt()
+                            SignInPrompt(onSignIn = { navController.navigate(Routes.Login) })
                         }
 
                         val chips = uiState.homePage?.chips.orEmpty()

@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.R
+import moe.rukamori.archivetune.constants.AccountNameKey
 import moe.rukamori.archivetune.constants.AudioNormalizationKey
 import moe.rukamori.archivetune.constants.AutoDownloadOnLikeKey
 import moe.rukamori.archivetune.constants.DarkMode
@@ -52,11 +53,8 @@ import moe.rukamori.archivetune.design.components.BackButton
 import moe.rukamori.archivetune.design.components.LargeTitleHeader
 import moe.rukamori.archivetune.design.components.SettingsGroup
 import moe.rukamori.archivetune.design.components.SettingsRow
-import moe.rukamori.archivetune.design.components.SignInDialog
 import moe.rukamori.archivetune.utils.rememberEnumPreference
 import moe.rukamori.archivetune.utils.rememberPreference
-import moe.rukamori.archivetune.viewmodels.LoginScreenState
-import moe.rukamori.archivetune.viewmodels.LoginViewModel
 
 /**
  * 設定（主要な系統だけ）。
@@ -70,10 +68,12 @@ import moe.rukamori.archivetune.viewmodels.LoginViewModel
  * 書き込みはその場で DataStore へ入る。
  *
  * @param onBack 戻る矢印。
+ * @param onSignIn 押したときに呼ぶ。呼び出し側でログイン画面を開く。
  */
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onSignIn: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val palette = applePalette()
@@ -110,7 +110,7 @@ fun SettingsScreen(
             item(key = "playback") { PlaybackGroup() }
             item(key = "storage") { StorageGroup() }
             item(key = "download") { DownloadGroup() }
-            item(key = "account") { AccountGroup() }
+            item(key = "account") { AccountGroup(onSignIn = onSignIn) }
 
             // 最後のグループの下に、ミニプレイヤー等と重ならない余白を取る。
             item(key = "tail") {
@@ -273,33 +273,29 @@ private fun DownloadGroup() {
 // ─────────────────────────────────────────────────────────── アカウント
 
 @Composable
-private fun AccountGroup() {
+private fun AccountGroup(onSignIn: () -> Unit) {
     var ytmSync by rememberPreference(YtmSyncKey, defaultValue = false)
 
-    val loginViewModel: LoginViewModel = hiltViewModel()
-    val loginState by loginViewModel.screenState.collectAsState()
-    var showLoginDialog by remember { mutableStateOf(false) }
+    // 設定はアプリを開き直してもアカウント名が残るため、表示だけ DataStore から拾う。
+    val accountName by rememberPreference(AccountNameKey, defaultValue = "")
 
     // composable の呼び出しは条件によらず同じ並びで行う必要があるため、
     // 両方の文字列を先に取り、後から選ぶ。
     val summary = stringResource(R.string.youtube_login_summary)
     val signedInFormat = stringResource(R.string.youtube_login_done)
     val subtitle =
-        (loginState as? LoginScreenState.Success)
-            ?.account
-            ?.name
-            ?.takeIf { it.isNotBlank() }
+        accountName
+            .takeIf { it.isNotBlank() }
             ?.let { signedInFormat.format(it) }
             ?: summary
 
     SettingsGroup(title = stringResource(R.string.account)) {
-        // 再生が bot 判定されたときの解除手段。ウェブ画面は開かず、
-        // ブラウザで取得した cookie を貼り付けるだけの入口にする。
+        // YouTube へのログイン。アプリ内のログイン画面を開く（Cookie の貼り付けはしない）。
         SettingsRow(
             title = stringResource(R.string.youtube_login),
             subtitle = subtitle,
             showDivider = true,
-            onClick = { showLoginDialog = true },
+            onClick = onSignIn,
         )
         SettingsRow(
             title = stringResource(R.string.yt_sync),
@@ -308,14 +304,6 @@ private fun AccountGroup() {
             trailing = {
                 AppleSwitch(checked = ytmSync, onCheckedChange = { ytmSync = it })
             },
-        )
-    }
-
-    if (showLoginDialog) {
-        SignInDialog(
-            state = loginState,
-            onDismiss = { showLoginDialog = false },
-            onSubmit = { cookie -> loginViewModel.onCookiesCaptured(cookie) },
         )
     }
 }

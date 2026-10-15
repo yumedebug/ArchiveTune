@@ -31,6 +31,9 @@ object Routes {
 
     const val Settings = "settings"
 
+    /** YouTube へのログイン画面。ログイン中は他タブを隠して全画面で出す。 */
+    const val Login = "login"
+
     /** 詳細画面。`{}` 内は `androidx.navigation.navArgument` の名前。 */
     const val Album = "album/{albumId}"
     const val Artist = "artist/{artistId}"
