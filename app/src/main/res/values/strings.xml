@@ -503,12 +503,11 @@
     <string name="action_logout">Log out</string>
     <string name="action_login">Log in</string>
     <string name="login">Login</string>
-    <string name="youtube_login">YouTube にログイン</string>
-    <string name="youtube_login_summary">アプリ内で YouTube にサインインすると、同期や再生が使えるようになります</string>
-    <string name="youtube_login_body">この画面の YouTube ページでアカウントにサインインしてください。アプリを離れずに完了します。</string>
-    <string name="youtube_login_failed">ログインに失敗しました。もう一度お試しください。</string>
-    <string name="youtube_login_done">%1$s としてログイン中</string>
-    <string name="login_success">ログインしました</string>
+    <string name="youtube_login">Sign in to YouTube</string>
+    <string name="youtube_login_summary">Sign in to YouTube in the app to enable syncing and playback</string>
+    <string name="youtube_login_body">Sign in to your account on the YouTube page shown here. You can finish without leaving the app.</string>
+    <string name="youtube_login_failed">Sign-in failed. Please try again.</string>
+    <string name="youtube_login_done">Signed in as %1$s</string>
     <string name="not_logged_in">Not logged in</string>
     <string name="playback_confirmation_required" translatable="false">Playback confirmation required</string>
     <string name="playback_requires_youtube_music_confirmation" translatable="false">Confirm playback in YouTube Music, then return to ArchiveTune.</string>
