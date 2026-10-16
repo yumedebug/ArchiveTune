@@ -36,6 +36,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -108,8 +109,8 @@ fun QueueScreen(
 
     // ピル2つ分の裏側。どちらも MusicService が DataStore から読んで効かせるので、
     // 画面側は書き込むだけにする。
-    val autoLoadMore by rememberPreference(AutoLoadMoreKey, true)
-    val crossfade by rememberPreference(CrossfadeEnabledKey, false)
+    var autoLoadMore by rememberPreference(AutoLoadMoreKey, true)
+    var crossfade by rememberPreference(CrossfadeEnabledKey, false)
 
     val upcoming =
         remember(queueWindows, currentWindowIndex) {
@@ -199,7 +200,7 @@ fun QueueScreen(
             ) {
                 if (upcoming.isNotEmpty()) {
                     item(key = "continueHeader") {
-                        ContinueHeader(sourceTitle = queueTitle)
+                        ContinueHeader(sourceTitle = queueTitle.orEmpty())
                     }
                 }
 

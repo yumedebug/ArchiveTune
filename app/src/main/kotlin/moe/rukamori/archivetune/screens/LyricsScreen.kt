@@ -54,6 +54,7 @@ import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.design.appleMetrics
 import moe.rukamori.archivetune.design.appleType
+import moe.rukamori.archivetune.design.components.CurrentTrackHeader
 import moe.rukamori.archivetune.design.components.EmptyState
 import moe.rukamori.archivetune.design.components.ErrorState
 import moe.rukamori.archivetune.design.components.LoadingState
@@ -273,7 +274,8 @@ fun LyricsScreen(
                                                     metrics.gutter.dp
                                                 },
                                             end = metrics.gutter.dp,
-                                            vertical = metrics.sm.dp,
+                                            top = metrics.sm.dp,
+                                            bottom = metrics.sm.dp,
                                         ),
                             )
                         }
