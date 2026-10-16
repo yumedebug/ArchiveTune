@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -46,9 +47,11 @@ import androidx.navigation.NavHostController
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
+import moe.rukamori.archivetune.constants.AccountNameKey
 import moe.rukamori.archivetune.design.appleMetrics
 import moe.rukamori.archivetune.design.applePalette
 import moe.rukamori.archivetune.design.appleType
+import moe.rukamori.archivetune.design.components.AvatarButton
 import moe.rukamori.archivetune.design.components.EmptyState
 import moe.rukamori.archivetune.design.components.ErrorState
 import moe.rukamori.archivetune.design.components.LargeTitleHeader
@@ -68,6 +71,7 @@ import moe.rukamori.archivetune.innertube.pages.HomePage
 import moe.rukamori.archivetune.models.toMediaMetadata
 import moe.rukamori.archivetune.playback.queues.YouTubeQueue
 import moe.rukamori.archivetune.utils.isLocalMediaId
+import moe.rukamori.archivetune.utils.rememberPreference
 import moe.rukamori.archivetune.viewmodels.HomeViewModel
 
 /**
@@ -80,10 +84,12 @@ import moe.rukamori.archivetune.viewmodels.HomeViewModel
  * → クイックピック → アカウントのプレイリスト。
  *
  * @param navController 曲以外（アルバム・アーティスト等）の遷移に使う。
+ * @param onSettings 大見出し右端のアカウント丸ボタンが押されたとき。
  */
 @Composable
 fun HomeScreen(
     navController: NavHostController,
+    onSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val viewModel: HomeViewModel = hiltViewModel()
@@ -93,6 +99,19 @@ fun HomeScreen(
     val metrics = appleMetrics()
 
     val screenState by viewModel.screenState.collectAsState()
+
+    // 右上の丸ボタンに映すアカウント名。未ログインなら空文字（人型アイコンになる）。
+    val accountName by rememberPreference(AccountNameKey, defaultValue = "")
+
+    // 大見出しと固定バー、どちらにも同じ丸ボタンを置く（置き場所が二つあっても
+    // 導線が一本になるように）。行き先は呼び出し側が決める。
+    val avatar: @Composable RowScope.() -> Unit = {
+        AvatarButton(
+            onClick = onSettings,
+            accountName = accountName,
+            contentDescription = stringResource(R.string.settings),
+        )
+    }
 
     // ポッドキャスト等、ViewModel から画面へ返るイベントを受け取る。
     LaunchedEffect(Unit) {
@@ -128,7 +147,10 @@ fun HomeScreen(
 
                 is HomeScreenState.Empty -> {
                     Column(Modifier.fillMaxSize()) {
-                        LargeTitleHeader(title = stringResource(R.string.home))
+                        LargeTitleHeader(
+                            title = stringResource(R.string.home),
+                            trailing = avatar,
+                        )
                         EmptyState(
                             title = stringResource(R.string.home),
                             message = stringResource(R.string.no_results_found),
@@ -144,7 +166,10 @@ fun HomeScreen(
 
                 is HomeScreenState.Error -> {
                     Column(Modifier.fillMaxSize()) {
-                        LargeTitleHeader(title = stringResource(R.string.home))
+                        LargeTitleHeader(
+                            title = stringResource(R.string.home),
+                            trailing = avatar,
+                        )
                         ErrorState(
                             title = stringResource(R.string.home),
                             message = stringResource(state.messageResId),
@@ -166,7 +191,10 @@ fun HomeScreen(
                         contentPadding = PaddingValues(bottom = metrics.block.dp),
                     ) {
                         item(key = "header") {
-                            LargeTitleHeader(title = stringResource(R.string.home))
+                            LargeTitleHeader(
+                                title = stringResource(R.string.home),
+                                trailing = avatar,
+                            )
                         }
 
                         // サインインしていないときだけ中身が現れる。再生の入口を
@@ -258,6 +286,7 @@ fun HomeScreen(
         PinnedTitleBar(
             title = stringResource(R.string.home),
             visible = titleCollapsed,
+            trailing = avatar,
         )
     }
 }

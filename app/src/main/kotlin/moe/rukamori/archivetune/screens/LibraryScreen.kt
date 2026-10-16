@@ -42,15 +42,18 @@ import androidx.navigation.NavHostController
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
+import moe.rukamori.archivetune.constants.AccountNameKey
 import moe.rukamori.archivetune.constants.LibraryFilter
 import moe.rukamori.archivetune.design.appleMetrics
 import moe.rukamori.archivetune.design.applePalette
 import moe.rukamori.archivetune.design.appleType
+import moe.rukamori.archivetune.design.components.AvatarButton
 import moe.rukamori.archivetune.design.components.EmptyState
 import moe.rukamori.archivetune.design.components.LargeTitleHeader
 import moe.rukamori.archivetune.design.components.ListItemRow
 import moe.rukamori.archivetune.design.components.SongRow
 import moe.rukamori.archivetune.models.toMediaMetadata
+import moe.rukamori.archivetune.utils.rememberPreference
 import moe.rukamori.archivetune.viewmodels.LibraryAlbumsViewModel
 import moe.rukamori.archivetune.viewmodels.LibraryArtistsViewModel
 import moe.rukamori.archivetune.viewmodels.LibraryPlaylistsViewModel
@@ -72,6 +75,7 @@ import moe.rukamori.archivetune.viewmodels.LibraryViewModel
 @Composable
 fun LibraryScreen(
     navController: NavHostController,
+    onSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val libraryViewModel: LibraryViewModel = hiltViewModel()
@@ -84,6 +88,9 @@ fun LibraryScreen(
     val playerConnection = LocalPlayerConnection.current
     val palette = applePalette()
     val metrics = appleMetrics()
+
+    // 右上の丸ボタンに映すアカウント名。未ログインなら空文字（人型アイコンになる）。
+    val accountName by rememberPreference(AccountNameKey, defaultValue = "")
 
     val filterState = libraryViewModel.filter
     val songs by songsViewModel.allSongs.collectAsState()
@@ -104,7 +111,18 @@ fun LibraryScreen(
                 .background(palette.background)
                 .windowInsetsPadding(windowInsets),
     ) {
-        LargeTitleHeader(title = stringResource(R.string.filter_library))
+        // 大見出し右端のアカウント丸ボタン（Apple Music の右上アバター相当）。
+        // これが設定（アカウント）画面へ入る唯一の導線。
+        LargeTitleHeader(
+            title = stringResource(R.string.filter_library),
+            trailing = {
+                AvatarButton(
+                    onClick = onSettings,
+                    accountName = accountName,
+                    contentDescription = stringResource(R.string.settings),
+                )
+            },
+        )
 
         LibraryTabRow(
             active = active,

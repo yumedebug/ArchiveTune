@@ -204,9 +204,19 @@ fun AppShell(
                     }
                 },
             ) {
-                composable(Routes.Home) { HomeScreen(navController) }
+                composable(Routes.Home) {
+                    HomeScreen(
+                        navController = navController,
+                        onSettings = { navController.navigate(Routes.Settings) },
+                    )
+                }
                 composable(Routes.New) { NewScreen(navController) }
-                composable(Routes.Library) { LibraryScreen(navController) }
+                composable(Routes.Library) {
+                    LibraryScreen(
+                        navController = navController,
+                        onSettings = { navController.navigate(Routes.Settings) },
+                    )
+                }
                 composable(Routes.Search) { SearchScreen(navController) }
 
                 composable(Routes.Player) {
