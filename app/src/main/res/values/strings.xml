@@ -1139,6 +1139,8 @@
 
     <!-- Five-tab shell and the player chrome shared by Now Playing / Queue / Lyrics. -->
     <string name="radio">Radio</string>
+    <string name="crossfade">Crossfade</string>
+    <string name="autoplay">Autoplay</string>
     <string name="favorite">Favorite</string>
     <string name="remove_from_favorites">Remove from favorites</string>
     <string name="continue_playing">Continue playing</string>

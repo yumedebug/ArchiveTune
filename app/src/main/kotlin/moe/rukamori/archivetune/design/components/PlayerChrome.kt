@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -22,7 +24,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,10 +38,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.map
+import moe.rukamori.archivetune.LocalDatabase
+import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.design.appleMetrics
 import moe.rukamori.archivetune.design.applePalette
 import moe.rukamori.archivetune.design.appleType
+import moe.rukamori.archivetune.extensions.toMediaItem
 
 /**
  * 再生系画面（Now Playing / キュー / 歌詞）で共有する操作部品。
@@ -64,6 +74,7 @@ fun PlayerCircleButton(
     content: @Composable () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    val palette = applePalette()
 
     Box(
         modifier =
@@ -72,7 +83,7 @@ fun PlayerCircleButton(
                 .clip(CircleShape)
                 .then(
                     if (backgroundAlpha > 0f) {
-                        Modifier.background(Color.White.copy(alpha = backgroundAlpha))
+                        Modifier.background(palette.fill.copy(alpha = backgroundAlpha))
                     } else {
                         Modifier
                     },
@@ -105,6 +116,7 @@ fun PlayerHeaderRow(
 ) {
     val metrics = appleMetrics()
     val type = appleType()
+    val palette = applePalette()
 
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -122,7 +134,7 @@ fun PlayerHeaderRow(
             Text(
                 text = title,
                 style = type.headline,
-                color = Color.White,
+                color = palette.onBackground,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -130,7 +142,7 @@ fun PlayerHeaderRow(
                 Text(
                     text = subtitle,
                     style = type.footnote,
-                    color = Color.White.copy(alpha = 0.62f),
+                    color = palette.labelSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -145,7 +157,7 @@ fun PlayerHeaderRow(
             Icon(
                 painter = painterResource(R.drawable.more_horiz),
                 contentDescription = stringResource(R.string.more),
-                tint = Color.White,
+                tint = palette.onBackground,
                 modifier = Modifier.size(20.dp),
             )
         }
@@ -173,7 +185,7 @@ fun FavoriteButton(
         Icon(
             painter = painterResource(if (isFavorite) R.drawable.star_filled else R.drawable.star),
             contentDescription = null,
-            tint = if (isFavorite) palette.accent else Color.White.copy(alpha = 0.72f),
+            tint = if (isFavorite) palette.accent else palette.labelSecondary,
             modifier = Modifier.size(22.dp),
         )
     }
@@ -197,24 +209,103 @@ fun PillToggle(
     contentDescription: String? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    val palette = applePalette()
 
     Box(
         modifier =
             modifier
                 .size(width = 52.dp, height = 36.dp)
                 .clip(RoundedCornerShape(18.dp))
-                .background(Color.White.copy(alpha = if (selected) 0.92f else 0.14f))
+                // 選択中はアクセントの面、非選択は中立の面。どちらも
+                // palette 経由なので、キューの背景がどちらのテーマでも消えない。
+                .background(if (selected) palette.accent else palette.fill)
                 .clickable(interactionSource = interactionSource, indication = null) { onClick() },
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             painter = painterResource(icon),
             contentDescription = contentDescription,
-            tint = if (selected) Color.Black else Color.White.copy(alpha = 0.80f),
+            tint = if (selected) Color.White else palette.onFill,
             modifier = Modifier.size(19.dp),
         )
     }
 }
 
-/** 帯の右側（★と「…」）だけを並べるための受け口。 */
-typealias PlayerHeaderActionsScope = RowScope
+/**
+ * キューと歌詞の上端に置く、再生中曲の帯（戻る矢印つき）。
+ *
+ * Apple Music はこの2画面に Now Playing の縮小版を頭へ乗せ、下端を
+ * 共通の操作行にする。ここでは上端をこの部品で代用する。
+ *
+ * ★の塗りは [MediaMetadata.liked] を使わない。**曲ごとの追従更新が無い**ため
+ * （`MusicService` がライク後にメタデータを書き直さない）、DB を直接購読する。
+ * こうしないと押しても星が埋まらない。
+ *
+ * 「…」の曲メニューもこの部品が内包する。渡すラムダが無いと押しても動かない
+ * ボタンになり、それは動かすな偽物になるため。
+ *
+ * @param onBack 戻る矢印。上位の画面へ戻す。
+ */
+@Composable
+fun CurrentTrackHeader(
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val playerConnection = LocalPlayerConnection.current ?: return
+    val database = LocalDatabase.current
+    val metrics = appleMetrics()
+    val metadata by playerConnection.mediaMetadata.collectAsState()
+    val mediaId = metadata?.id
+
+    val liked by remember(mediaId) {
+        database.song(mediaId).map { it?.song?.liked == true }
+    }.collectAsState(initial = false)
+
+    var showMenu by remember { mutableStateOf(false) }
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .padding(start = metrics.gutter.dp - metrics.xs.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BackButton(onClick = onBack, tint = Color.White)
+        }
+
+        PlayerHeaderRow(
+            artworkUrl = metadata?.thumbnailUrl,
+            title = metadata?.title.orEmpty(),
+            subtitle = metadata?.artists.orEmpty().joinToString(", ") { it.name },
+            isFavorite = liked,
+            onToggleFavorite = { playerConnection.toggleLike() },
+            onOpenMenu = { showMenu = true },
+            modifier = Modifier.padding(horizontal = metrics.gutter.dp),
+        )
+    }
+
+    // 一覧と同じ曲メニュー。この帯を出す2画面からも再生まわりの操作だけ使えるようにする。
+    if (showMenu) {
+        metadata?.let { song ->
+            SongMenuSheet(
+                song = song,
+                onDismiss = { showMenu = false },
+                onPlayNext = {
+                    playerConnection.playNext(song.toMediaItem())
+                    showMenu = false
+                },
+                onAddToQueue = {
+                    playerConnection.addToQueue(song.toMediaItem())
+                    showMenu = false
+                },
+                onPlayRadio = {
+                    playerConnection.playRadioFrom(song)
+                    showMenu = false
+                },
+            )
+        }
+    }
+}
+

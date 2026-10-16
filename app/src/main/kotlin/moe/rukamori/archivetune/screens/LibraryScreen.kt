@@ -9,21 +9,25 @@ package moe.rukamori.archivetune.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -33,8 +37,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -47,6 +51,7 @@ import moe.rukamori.archivetune.constants.LibraryFilter
 import moe.rukamori.archivetune.design.appleMetrics
 import moe.rukamori.archivetune.design.applePalette
 import moe.rukamori.archivetune.design.appleType
+import moe.rukamori.archivetune.design.components.Artwork
 import moe.rukamori.archivetune.design.components.AvatarButton
 import moe.rukamori.archivetune.design.components.EmptyState
 import moe.rukamori.archivetune.design.components.LargeTitleHeader
@@ -63,14 +68,18 @@ import moe.rukamori.archivetune.viewmodels.LibraryViewModel
 /**
  * Library タブ。
  *
- * [LibraryViewModel.filter] がタブの選択状態を持つので、そこだけを見て
- * 表示を切り替える。曲・アーティスト・アルバム・プレイリストはそれぞれ
- * 専用 ViewModel が流すので、画面側は読むだけでよい。
+ * 並びは Apple Music のライブラリと同じ順に組む：
+ * **3列のアートグリッド → カテゴリ行 → 選んだカテゴリの一覧**。
  *
- * 初期値は [LibraryFilter.LIBRARY]（混合表示）。ここでは4種のタブしか
- * 持たないため、混合の間は曲と同等に扱い、タブを触った時点で確定する。
+ * カテゴリ行は下線タブの代わりに入る（添付では Playlists / Artists / Albums /
+ * Songs が色付きアイコンの行になっている）。押した側だけアクセントにして、
+ * いま何の一覧が出ているかを行の色で示す。
+ *
+ * [LibraryViewModel.filter] が選択状態を持つので、そこだけを見て表示を切り替える。
+ * 曲・アーティスト・アルバム・プレイリストはそれぞれ専用 ViewModel が流す。
  *
  * @param navController アルバム・アーティスト・プレイリストの詳細へ送る。
+ * @param onSettings 大見出し右端のアカウント丸ボタンから設定へ入る。
  */
 @Composable
 fun LibraryScreen(
@@ -124,35 +133,43 @@ fun LibraryScreen(
             },
         )
 
-        LibraryTabRow(
-            active = active,
-            onSelect = { filterState.value = it },
-        )
-
-        val isEmpty =
-            when (active) {
-                LibraryFilter.ARTISTS -> artists.isEmpty()
-                LibraryFilter.ALBUMS -> albums.isEmpty()
-                LibraryFilter.PLAYLISTS -> playlists.isEmpty()
-                else -> songs.isEmpty()
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = metrics.block.dp),
+        ) {
+            // 3列のアートグリッド。添付のライブラリと同じく、見出し直下に
+            // 「最近追加した項目」を面として出す。枠線は引かず、隙間だけで区切る。
+            if (albums.isNotEmpty()) {
+                item(key = "recentGrid") {
+                    RecentlyAddedGrid(
+                        albums =
+                            albums
+                                .take(6)
+                                .map { album ->
+                                    LibraryAlbumCell(
+                                        id = album.id,
+                                        title = album.title,
+                                        thumbnailUrl = album.thumbnailUrl,
+                                    )
+                                },
+                        onOpen = { cell -> navController.navigate(Routes.album(cell.id)) },
+                    )
+                }
             }
 
-        if (isEmpty) {
-            EmptyState(
-                title = stringResource(R.string.filter_library),
-                message = stringResource(R.string.no_results_found),
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-            )
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = metrics.block.dp),
-            ) {
-                when (active) {
-                    LibraryFilter.ARTISTS -> {
+            // 下線タブの代わりになるカテゴリ行。
+            item(key = "categories") {
+                LibraryCategoryRows(
+                    active = active,
+                    onSelect = { filterState.value = it },
+                )
+            }
+
+            when (active) {
+                LibraryFilter.ARTISTS -> {
+                    if (artists.isEmpty()) {
+                        item(key = "empty") { LibraryEmptyState() }
+                    } else {
                         items(items = artists, key = { it.id }) { artist ->
                             ListItemRow(
                                 title = artist.title,
@@ -162,8 +179,12 @@ fun LibraryScreen(
                             )
                         }
                     }
+                }
 
-                    LibraryFilter.ALBUMS -> {
+                LibraryFilter.ALBUMS -> {
+                    if (albums.isEmpty()) {
+                        item(key = "empty") { LibraryEmptyState() }
+                    } else {
                         items(items = albums, key = { it.id }) { album ->
                             ListItemRow(
                                 title = album.title,
@@ -172,8 +193,12 @@ fun LibraryScreen(
                             )
                         }
                     }
+                }
 
-                    LibraryFilter.PLAYLISTS -> {
+                LibraryFilter.PLAYLISTS -> {
+                    if (playlists.isEmpty()) {
+                        item(key = "empty") { LibraryEmptyState() }
+                    } else {
                         items(items = playlists, key = { it.id }) { playlist ->
                             ListItemRow(
                                 title = playlist.title,
@@ -185,8 +210,12 @@ fun LibraryScreen(
                             )
                         }
                     }
+                }
 
-                    else -> {
+                else -> {
+                    if (songs.isEmpty()) {
+                        item(key = "empty") { LibraryEmptyState() }
+                    } else {
                         itemsIndexed(items = songs, key = { _, song -> song.id }) { index, song ->
                             SongRow(
                                 song = song.toMediaMetadata(),
@@ -206,63 +235,189 @@ fun LibraryScreen(
     }
 }
 
-/** Library のカテゴリタブ。下線ではなく字の太さと色で現在地を示す。 */
+/** 一覧が空のときの受け皿。行が無くなっても上部のグリッドとカテゴリは残す。 */
 @Composable
-private fun LibraryTabRow(
+private fun LibraryEmptyState() {
+    EmptyState(
+        title = stringResource(R.string.filter_library),
+        message = stringResource(R.string.no_results_found),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(240.dp),
+    )
+}
+
+/**
+ * 「最近追加した項目」を3列で敷くグリッド。
+ *
+ * Lazy の入れ子（[androidx.compose.foundation.lazy.LazyVerticalGrid] を
+ * [LazyColumn] の item の中に置く）は測定が二重になり落ちやすいため、
+ * 行ごとに普通の [Row] を組む。出すのは先頭数件だけなので遅延は要らない。
+ */
+/** グリッド1枚ぶんの表示に必要な3項目だけを持つ型（ViewModel の返す型には依存しない）。 */
+private data class LibraryAlbumCell(
+    val id: String,
+    val title: String,
+    val thumbnailUrl: String?,
+)
+
+@Composable
+private fun RecentlyAddedGrid(
+    albums: List<LibraryAlbumCell>,
+    onOpen: (LibraryAlbumCell) -> Unit,
+) {
+    val metrics = appleMetrics()
+    val interactionSource = remember { MutableInteractionSource() }
+
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(start = metrics.gutter.dp, end = metrics.gutter.dp, bottom = metrics.xs.dp),
+    ) {
+        albums.chunked(3).forEach { rowItems ->
+            Row(modifier = Modifier.fillMaxWidth().padding(bottom = metrics.md.dp)) {
+                rowItems.forEachIndexed { index, album ->
+                    Column(
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .padding(end = if (index == rowItems.lastIndex) 0.dp else metrics.sm.dp)
+                                .clickable(
+                                    interactionSource = interactionSource,
+                                    indication = null,
+                                ) { onOpen(album) },
+                    ) {
+                        Artwork(
+                            url = album.thumbnailUrl,
+                            contentDescription = album.title,
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .aspectRatio(1f),
+                        )
+                        Text(
+                            text = album.title,
+                            style = appleType().footnote,
+                            color = applePalette().onBackground,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = metrics.xs.dp),
+                        )
+                    }
+                }
+                repeat(3 - rowItems.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+/** カテゴリ行の地色。Apple Music のライブラリと同じく1行ずつ違う色にする。 */
+private val categoryTints =
+    listOf(
+        Color(0xFF3E7BFA),
+        Color(0xFFE0489C),
+        Color(0xFFE2483F),
+        Color(0xFFF0872B),
+    )
+
+/**
+ * Playlists / Artists / Albums / Songs の4行。
+ *
+ * 添付では色付きの四角いアイコン、カテゴリ名、右端のシェブロンで構成され、
+ * 下線タブは無い。選択中の行だけ名前をアクセントにして現在地を示す。
+ */
+@Composable
+private fun LibraryCategoryRows(
     active: LibraryFilter,
     onSelect: (LibraryFilter) -> Unit,
+) {
+    val metrics = appleMetrics()
+
+    val rows =
+        listOf(
+            Triple(R.string.playlists, R.drawable.queue_music, LibraryFilter.PLAYLISTS),
+            Triple(R.string.artists, R.drawable.person, LibraryFilter.ARTISTS),
+            Triple(R.string.albums, R.drawable.album, LibraryFilter.ALBUMS),
+            Triple(R.string.songs, R.drawable.music_note, LibraryFilter.SONGS),
+        )
+
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = metrics.xs.dp),
+    ) {
+        rows.forEachIndexed { index, (labelId, icon, filter) ->
+            LibraryCategoryRow(
+                icon = icon,
+                tint = categoryTints[index % categoryTints.size],
+                title = stringResource(labelId),
+                selected = filter == active,
+                onClick = { onSelect(filter) },
+            )
+        }
+    }
+}
+
+/** カテゴリ1行。枠線は引かず、左の色面と余白だけで行を分ける。 */
+@Composable
+private fun LibraryCategoryRow(
+    icon: Int,
+    tint: Color,
+    title: String,
+    selected: Boolean,
+    onClick: () -> Unit,
 ) {
     val palette = applePalette()
     val type = appleType()
     val metrics = appleMetrics()
-
-    val tabs =
-        listOf(
-            LibraryFilter.SONGS to R.string.songs,
-            LibraryFilter.ARTISTS to R.string.artists,
-            LibraryFilter.ALBUMS to R.string.albums,
-            LibraryFilter.PLAYLISTS to R.string.playlists,
-        )
+    val interactionSource = remember { MutableInteractionSource() }
 
     Row(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(
-                    horizontal = metrics.gutter.dp,
-                    vertical = metrics.xs.dp,
-                ),
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                ) { onClick() }
+                .padding(horizontal = metrics.gutter.dp, vertical = metrics.sm.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        tabs.forEach { (filter, labelId) ->
-            val isSelected = filter == active
-            // iOS のライブラリフィルタと同じく、選択中のみ丸い地色を敷いて選択外は地抜きにする。
-            Text(
-                text = stringResource(labelId),
-                style =
-                    type.subhead.copy(
-                        fontWeight =
-                            if (isSelected) {
-                                FontWeight.SemiBold
-                            } else {
-                                FontWeight.Medium
-                            },
-                    ),
-                color = if (isSelected) palette.onFill else palette.labelSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier =
-                    Modifier
-                        .padding(end = metrics.xs.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(if (isSelected) palette.fill else Color.Transparent)
-                        .padding(horizontal = metrics.md.dp, vertical = metrics.xs.dp)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                        ) { onSelect(filter) },
+        Box(
+            modifier =
+                Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(tint),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter = painterResource(icon),
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(19.dp),
             )
         }
+
+        Spacer(Modifier.width(metrics.md.dp))
+
+        Text(
+            text = title,
+            style = type.body,
+            color = if (selected) palette.accent else palette.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+
+        Icon(
+            painter = painterResource(R.drawable.chevron_right),
+            contentDescription = null,
+            tint = palette.labelSecondary,
+            modifier = Modifier.size(18.dp),
+        )
     }
 }

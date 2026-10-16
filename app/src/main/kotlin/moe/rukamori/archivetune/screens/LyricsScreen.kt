@@ -54,10 +54,8 @@ import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.design.appleMetrics
 import moe.rukamori.archivetune.design.appleType
-import moe.rukamori.archivetune.design.components.BackButton
 import moe.rukamori.archivetune.design.components.EmptyState
 import moe.rukamori.archivetune.design.components.ErrorState
-import moe.rukamori.archivetune.design.components.LargeTitleHeader
 import moe.rukamori.archivetune.design.components.LoadingState
 import moe.rukamori.archivetune.viewmodels.LyricsRenderScreenState
 import moe.rukamori.archivetune.viewmodels.LyricsRenderViewModel
@@ -175,21 +173,8 @@ fun LyricsScreen(
                 )
                 .windowInsetsPadding(windowInsets),
     ) {
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .height(44.dp)
-                    .padding(start = metrics.gutter.dp - metrics.xs.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BackButton(onClick = onBack, tint = Color.White)
-        }
-
-        LargeTitleHeader(
-            title = stringResource(R.string.lyrics),
-            subtitle = mediaMetadata?.title,
-        )
+        // 上端は Now Playing の縮小版（Apple Music のキュー・歌詞と同じ骨格）。
+        CurrentTrackHeader(onBack = onBack)
 
         when (val state = renderState) {
             is LyricsRenderScreenState.Loading -> {
@@ -231,13 +216,19 @@ fun LyricsScreen(
                             .fillMaxWidth()
                             .weight(1f)
                             .onSizeChanged { viewportHeight = it.height },
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                    horizontalAlignment = Alignment.Start,
                 ) {
                     itemsIndexed(
                         items = state.lyrics.lines,
                         key = { index, _ -> index },
                     ) { index, line ->
                         val isCurrent = index == currentIndex
+
+                        // Apple Music の歌詞は行を左右に段違いに並べる。
+                        // 位置は**行番号だけで**決める。アクティブ行を基準にすると
+                        // 再生が進むたびに段が入れ替わって視線が迷うため。
+                        val indented = index % 2 == 1
+
                         val color by
                             animateColorAsState(
                                 targetValue =
@@ -264,7 +255,7 @@ fun LyricsScreen(
                                     },
                                 color = color,
                                 fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
-                                textAlign = TextAlign.Center,
+                                textAlign = TextAlign.Start,
                                 maxLines = 4,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier =
@@ -275,7 +266,13 @@ fun LyricsScreen(
                                             indication = null,
                                         ) { seekTo(line.startMs) }
                                         .padding(
-                                            horizontal = metrics.gutter.dp,
+                                            start =
+                                                if (indented) {
+                                                    metrics.gutter.dp + 44.dp
+                                                } else {
+                                                    metrics.gutter.dp
+                                                },
+                                            end = metrics.gutter.dp,
                                             vertical = metrics.sm.dp,
                                         ),
                             )
@@ -286,14 +283,19 @@ fun LyricsScreen(
                                 text = line.translation.orEmpty(),
                                 style = type.subhead,
                                 color = Color.White.copy(alpha = if (isCurrent) 0.72f else 0.28f),
-                                textAlign = TextAlign.Center,
+                                textAlign = TextAlign.Start,
                                 maxLines = 3,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier =
                                     Modifier
                                         .fillMaxWidth()
                                         .padding(
-                                            start = metrics.gutter.dp,
+                                            start =
+                                                if (indented) {
+                                                    metrics.gutter.dp + 44.dp
+                                                } else {
+                                                    metrics.gutter.dp
+                                                },
                                             end = metrics.gutter.dp,
                                             bottom = metrics.sm.dp,
                                         ),

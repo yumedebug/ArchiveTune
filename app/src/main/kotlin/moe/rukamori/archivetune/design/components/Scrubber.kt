@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
@@ -58,8 +59,12 @@ fun Scrubber(
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
     onDragStateChange: (Boolean) -> Unit = {},
+    // 進行済みの帯とつまみの色。`null` ならアクセント。全画面プレイヤーでは
+    // ジャケットの色が画面を支配するので、白にして主張を消す。
+    playedColor: Color? = null,
 ) {
     val palette = applePalette()
+    val played = playedColor ?: palette.accent
 
     // ポインタ入力のラムダは初回だけ構築されるため、後から変わる値は
     // State 経由で読む。これでラムダが掴んだ参照でも常に最新値になる。
@@ -149,14 +154,14 @@ fun Scrubber(
         )
         if (centerX > 0.5f) {
             drawRoundRect(
-                color = palette.accent,
+                color = played,
                 topLeft = Offset(0f, topY),
                 size = Size(centerX, thicknessPx),
                 cornerRadius = CornerRadius(radius, radius),
             )
         }
         drawCircle(
-            color = palette.accent,
+            color = played,
             radius = thumbRadius.toPx(),
             center = Offset(centerX, centerY),
         )

@@ -1067,6 +1067,8 @@
 
     <!-- 5タブ構成のシェル、および Now Playing / キュー / 歌詞で共有する操作系。 -->
     <string name="radio">ラジオ</string>
+    <string name="crossfade">クロスフェード</string>
+    <string name="autoplay">自動再生</string>
     <string name="favorite">お気に入り</string>
     <string name="remove_from_favorites">お気に入りから削除</string>
     <string name="continue_playing">再生を続ける</string>

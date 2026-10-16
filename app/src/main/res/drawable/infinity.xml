@@ -1,0 +1,15 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960">
+  <!-- 無限記号（自動再生のピル用）。左の輪 → 中心 → 右の輪 → 中心と
+       戻る1本の線で描く。塗りではなく線なので、線幅だけを調える。 -->
+  <path
+      android:pathData="M480,480C400,340 260,340 200,480C260,620 400,620 480,480C560,340 700,340 760,480C700,620 560,620 480,480"
+      android:strokeColor="@android:color/white"
+      android:strokeWidth="76"
+      android:strokeLineCap="round"
+      android:strokeLineJoin="round"
+      android:fillColor="@android:color/transparent"/>
+</vector>
