@@ -18,9 +18,10 @@ package moe.rukamori.archivetune.screens
  * 既存のハンドラ（共有インテント、Android Auto 等）から渡される文字列も新UIで解決できる。
  */
 object Routes {
-    /** ボトムナビの4タブ。 */
+    /** ボトムナビの5タブ。順序は [MainTabs] と揃える（Apple Music の並び）。 */
     const val Home = "home"
     const val New = "new"
+    const val Radio = "radio"
     const val Library = "library"
     const val Search = "search"
 
@@ -48,8 +49,8 @@ object Routes {
     const val ArgBrowseId = "browseId"
     const val ArgEncodedQuery = "encodedQuery"
 
-    /** ボトムナビに載せるタブのルート順。 */
-    val MainTabs = listOf(Home, New, Library, Search)
+    /** ボトムナビに載せるタブのルート順（Home → New → Radio → Library → Search）。 */
+    val MainTabs = listOf(Home, New, Radio, Library, Search)
 
     // ── 実際に navigate へ渡す文字列を組むヘルパ ─────────────────
     // `{}` 付きの定数は NavHost に登録する**パターン**であり、そのまま

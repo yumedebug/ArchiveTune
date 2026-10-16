@@ -1064,4 +1064,10 @@
     <string name="scheduled_backup_load_failed">スケジュールされたバックアップ設定をロードできませんでした</string>
     <string name="scheduled_backup_update_failed">スケジュールされたバックアップ設定を保存できませんでした</string>
     <string name="gatekeeper_connection_blocked">ArchiveTune Remote によって接続がブロックされました。このアプリは正式な ArchiveTune ビルドとして検証できませんでした。 https://github.com/rukamori/ArchiveTune または https://t.me/ArchiveTuneGC から公式ビルドをインストールします。</string>
+
+    <!-- 5タブ構成のシェル、および Now Playing / キュー / 歌詞で共有する操作系。 -->
+    <string name="radio">ラジオ</string>
+    <string name="favorite">お気に入り</string>
+    <string name="remove_from_favorites">お気に入りから削除</string>
+    <string name="continue_playing">再生を続ける</string>
 </resources>

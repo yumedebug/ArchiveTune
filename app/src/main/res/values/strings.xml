@@ -1136,4 +1136,10 @@
     <string name="scheduled_backup_update_failed">Scheduled backup settings could not be saved</string>
     <string name="gatekeeper_connection_blocked">Connection blocked by ArchiveTune Remote. This app could not be verified as an official ArchiveTune build. Install an official build from https://github.com/rukamori/ArchiveTune or https://t.me/ArchiveTuneGC.</string>
     <string name="local_songs_metadata_unavailable">Imported %1$d songs. Online metadata is unavailable; file tags were kept.</string>
+
+    <!-- Five-tab shell and the player chrome shared by Now Playing / Queue / Lyrics. -->
+    <string name="radio">Radio</string>
+    <string name="favorite">Favorite</string>
+    <string name="remove_from_favorites">Remove from favorites</string>
+    <string name="continue_playing">Continue playing</string>
 </resources>

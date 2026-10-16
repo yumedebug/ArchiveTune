@@ -122,6 +122,8 @@ fun AppShell(
                 ),
             )
 
+    // Apple Music と同じ5タブ。順序は Routes.MainTabs と揃える。
+    // 検索もカプセルの中に含める（分離した円形ボタンはやめる）。
     val mainTabs =
         remember {
             listOf(
@@ -138,22 +140,23 @@ fun AppShell(
                     route = Routes.New,
                 ),
                 NavigationTab(
+                    labelId = R.string.radio,
+                    iconInactive = R.drawable.radio,
+                    iconActive = R.drawable.radio,
+                    route = Routes.Radio,
+                ),
+                NavigationTab(
                     labelId = R.string.filter_library,
                     iconInactive = R.drawable.library_outlined,
                     iconActive = R.drawable.library_filled,
                     route = Routes.Library,
                 ),
-            )
-        }
-
-    // 検索はカプセルから外し、右へ独立した円形ボタンとして置く（iOS 26 の Apple Music の形）。
-    val searchTab =
-        remember {
-            NavigationTab(
-                labelId = R.string.search,
-                iconInactive = R.drawable.search,
-                iconActive = R.drawable.search,
-                route = Routes.Search,
+                NavigationTab(
+                    labelId = R.string.search,
+                    iconInactive = R.drawable.search,
+                    iconActive = R.drawable.search,
+                    route = Routes.Search,
+                ),
             )
         }
 
@@ -199,7 +202,7 @@ fun AppShell(
                     when (initialState.destination.route) {
                         Routes.Player, Routes.Lyrics, Routes.Queue ->
                             slideOutVertically(tween(300)) { it } + fadeOut(tween(200))
-                        Routes.Home, Routes.New, Routes.Library, Routes.Search -> fadeOut(tween(160))
+                        in Routes.MainTabs -> fadeOut(tween(160))
                         else -> slideOutHorizontally(tween(260)) { it / 4 } + fadeOut(tween(180))
                     }
                 },
@@ -211,6 +214,7 @@ fun AppShell(
                     )
                 }
                 composable(Routes.New) { NewScreen(navController) }
+                composable(Routes.Radio) { RadioScreen(navController) }
                 composable(Routes.Library) {
                     LibraryScreen(
                         navController = navController,
@@ -296,7 +300,6 @@ fun AppShell(
                 GlassNavigationBar(
                     tabs = mainTabs,
                     selectedRoute = currentRoute,
-                    detachedTab = searchTab,
                     onSelect = { tab ->
                         if (tab.route == currentRoute) {
                             // 選択済みタブの再タップは一覧を先頭へ戻す。
