@@ -13,10 +13,12 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.launch
 import moe.rukamori.archivetune.aicontentfilter.FilterAiContentUseCase
 import moe.rukamori.archivetune.aicontentfilter.LoadAiContentFilterPolicyUseCase
@@ -49,6 +51,12 @@ class OnlineSearchSuggestionViewModel
         init {
             viewModelScope.launch {
                 query
+                    // 打ち続けている間は候補を取りに行かない。素のクエリ流では
+                    // 1打鍵ごとに YouTube へ飛ぶため、止まったときだけ残った文字列を送る。
+                    .mapLatest { text ->
+                        if (text.isNotBlank()) delay(SEARCH_DEBOUNCE_MS)
+                        text
+                    }
                     .flatMapLatest { query ->
                         if (query.isEmpty()) {
                             database.searchHistory().map { history ->
@@ -96,7 +104,6 @@ class OnlineSearchSuggestionViewModel
         fun updateQuery(query: String) {
             this.query.value = query
         }
-
         fun deleteHistory(history: SearchHistory) {
             database.query {
                 delete(history)
@@ -109,3 +116,6 @@ data class SearchSuggestionViewState(
     val suggestions: List<String> = emptyList(),
     val items: List<YTItem> = emptyList(),
 )
+
+/** 打ち直しを待つ時間。ここで空白を置かないと打鍵のたびに候補を取得してしまう。 */
+private const val SEARCH_DEBOUNCE_MS = 300L

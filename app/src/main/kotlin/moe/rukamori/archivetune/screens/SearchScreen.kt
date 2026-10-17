@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -34,12 +35,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
@@ -61,16 +65,20 @@ import moe.rukamori.archivetune.design.applePalette
 import moe.rukamori.archivetune.design.appleType
 import moe.rukamori.archivetune.design.components.EmptyState
 import moe.rukamori.archivetune.design.components.ErrorState
+import moe.rukamori.archivetune.design.components.LargeTitleHeader
 import moe.rukamori.archivetune.design.components.ListItemRow
 import moe.rukamori.archivetune.design.components.LoadingState
 import moe.rukamori.archivetune.design.components.MediaCard
+import moe.rukamori.archivetune.design.components.PinnedTitleBar
 import moe.rukamori.archivetune.design.components.SectionHeader
 import moe.rukamori.archivetune.design.components.SongRow
+import moe.rukamori.archivetune.design.components.rememberTitleCollapse
 import moe.rukamori.archivetune.innertube.models.SongItem
 import moe.rukamori.archivetune.models.toMediaMetadata
 import moe.rukamori.archivetune.screens.onlineSearchResultRoute
 import moe.rukamori.archivetune.viewmodels.LocalFilter
 import moe.rukamori.archivetune.viewmodels.LocalSearchViewModel
+import moe.rukamori.archivetune.viewmodels.OnlineSearchSuggestionViewModel
 import moe.rukamori.archivetune.viewmodels.SearchDiscoveryScreenState
 import moe.rukamori.archivetune.viewmodels.SearchDiscoveryViewModel
 import moe.rukamori.archivetune.db.entities.Artist as LocalArtist
@@ -95,6 +103,7 @@ fun SearchScreen(
 ) {
     val localSearchViewModel: LocalSearchViewModel = hiltViewModel()
     val discoveryViewModel: SearchDiscoveryViewModel = hiltViewModel()
+    val suggestionViewModel: OnlineSearchSuggestionViewModel = hiltViewModel()
 
     val windowInsets = LocalPlayerAwareWindowInsets.current
     val playerConnection = LocalPlayerConnection.current
@@ -105,107 +114,191 @@ fun SearchScreen(
     val query by localSearchViewModel.query.collectAsState()
     val localResult by localSearchViewModel.result.collectAsState()
     val discoveryState by discoveryViewModel.state.collectAsState()
+    val suggestionState by suggestionViewModel.viewState.collectAsState()
 
-    fun submitSearch() {
-        val trimmed = query.trim()
+    // 入力に合わせて候補を取りに行く。クエリが変わったときだけ ViewModel へ渡す。
+    LaunchedEffect(query) { suggestionViewModel.updateQuery(query) }
+
+    fun submitSearch(value: String = query) {
+        val trimmed = value.trim()
         if (trimmed.isEmpty()) return
         focusManager.clearFocus()
         navController.navigate(onlineSearchResultRoute(trimmed))
     }
 
-    Column(
+    // 大見出しは一覧の先頭 item としてスクロールし、潜ったら固定バーへ差し替える。
+    val listState = rememberLazyListState()
+    val titleCollapsed = rememberTitleCollapse(listState)
+
+    // 検索は黒を基調にする。見出し・フィールド・中身を1本の縦列にまとめ、
+    // 上2つ（見出しと入力欄）がスクロールする手前までで隠れないようにする。
+    Box(
         modifier =
             modifier
                 .fillMaxSize()
-                .background(palette.background)
-                .windowInsetsPadding(windowInsets),
+                .background(palette.background),
     ) {
-        SearchField(
-            value = query,
-            onValueChange = { localSearchViewModel.query.value = it },
-            onSubmit = { submitSearch() },
-        )
-
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = metrics.block.dp),
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(windowInsets),
         ) {
-            if (query.isBlank()) {
-                // ディスカバリーは項目数が決まっておらず、
-                // 「見出し＋横スクロール」の繰り返しなので1つの item にまとめる。
-                // item の中だけがコンポジションなので、そこで各部品を呼ぶ。
-                item(key = "discovery") {
-                    DiscoveryContent(
-                        state = discoveryState,
-                        onRetry = { discoveryViewModel.retry() },
-                        onOpenSong = { item -> playerConnection?.playYtSong(item) },
-                        onOpenAlbum = { id -> navController.navigate(Routes.album(id)) },
-                        onOpenArtist = { id -> navController.navigate(Routes.artist(id)) },
-                        onOpenBrowse = { id -> navController.navigate(Routes.browse(id)) },
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState,
+                contentPadding = PaddingValues(bottom = metrics.block.dp),
+            ) {
+                item(key = "header") {
+                    LargeTitleHeader(title = stringResource(R.string.search))
+                }
+
+                item(key = "field") {
+                    SearchField(
+                        value = query,
+                        onValueChange = { localSearchViewModel.query.value = it },
+                        onSubmit = { submitSearch() },
                     )
                 }
-            } else {
-                val orderedKeys =
-                    listOf(
-                        LocalFilter.SONG,
-                        LocalFilter.ALBUM,
-                        LocalFilter.ARTIST,
-                        LocalFilter.PLAYLIST,
-                    )
 
-                // 絞り込み未指定時は ALL に全件が入る。そこにだけ見出しつけ、
-                // 後続はフィルタ別に見出しを付ける。
-                val allItems = localResult.map[LocalFilter.ALL].orEmpty()
-                if (allItems.isNotEmpty()) {
-                    items(items = allItems, key = { "all:${it.id}" }) { item ->
-                        LocalItemRow(
-                            item = item,
-                            allSongs = allItems,
-                            onPlay = { index ->
-                                playerConnection?.playSongsStartingAt(allItems, index)
-                            },
-                            onOpen = { navController.openLocalItem(it) },
+                if (query.isBlank()) {
+                    // ディスカバリーは項目数が決まっておらず、
+                    // 「見出し＋横スクロール」の繰り返しなので1つの item にまとめる。
+                    // item の中だけがコンポジションなので、そこで各部品を呼ぶ。
+                    item(key = "discovery") {
+                        DiscoveryContent(
+                            state = discoveryState,
+                            onRetry = { discoveryViewModel.retry() },
+                            onOpenSong = { item -> playerConnection?.playYtSong(item) },
+                            onOpenAlbum = { id -> navController.navigate(Routes.album(id)) },
+                            onOpenArtist = { id -> navController.navigate(Routes.artist(id)) },
+                            onOpenBrowse = { id -> navController.navigate(Routes.browse(id)) },
                         )
                     }
                 } else {
-                    orderedKeys.forEach { key ->
-                        val entries = localResult.map[key].orEmpty()
-                        if (entries.isEmpty()) return@forEach
-
-                        item(key = "head:$key") {
-                            SectionHeader(title = localFilterLabel(key))
+                    // 検索候補。履歴と候補文字列を重複なく上から並べる。
+                    // LazyListScope の中なので remember は使わず、通しごとに組み立てる。
+                    val suggestions =
+                        (suggestionState.history.map { it.query } + suggestionState.suggestions)
+                            .distinct()
+                            .filter { it.isNotBlank() }
+                    if (suggestions.isNotEmpty()) {
+                        items(
+                            items = suggestions,
+                            key = { "suggestion:$it" },
+                        ) { suggestion ->
+                            SuggestionRow(
+                                text = suggestion,
+                                onClick = { submitSearch(suggestion) },
+                            )
                         }
-                        items(items = entries, key = { "${key}:${it.id}" }) { item ->
+                    }
+
+                    val orderedKeys =
+                        listOf(
+                            LocalFilter.SONG,
+                            LocalFilter.ALBUM,
+                            LocalFilter.ARTIST,
+                            LocalFilter.PLAYLIST,
+                        )
+
+                    // 絞り込み未指定時は ALL に全件が入る。そこにだけ見出しつけ、
+                    // 後続はフィルタ別に見出しを付ける。
+                    val allItems = localResult.map[LocalFilter.ALL].orEmpty()
+                    if (allItems.isNotEmpty()) {
+                        items(items = allItems, key = { "all:${it.id}" }) { item ->
                             LocalItemRow(
                                 item = item,
-                                allSongs = entries,
+                                allSongs = allItems,
                                 onPlay = { index ->
-                                    playerConnection?.playSongsStartingAt(entries, index)
+                                    playerConnection?.playSongsStartingAt(allItems, index)
                                 },
                                 onOpen = { navController.openLocalItem(it) },
                             )
                         }
-                    }
-                }
+                    } else {
+                        orderedKeys.forEach { key ->
+                            val entries = localResult.map[key].orEmpty()
+                            if (entries.isEmpty()) return@forEach
 
-                if (allItems.isEmpty() && orderedKeys.all { localResult.map[it].isNullOrEmpty() }) {
-                    item(key = "empty") {
-                        EmptyState(
-                            title = stringResource(R.string.search),
-                            message = stringResource(R.string.no_results_found),
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = metrics.block.dp),
-                        )
+                            item(key = "head:$key") {
+                                SectionHeader(title = localFilterLabel(key))
+                            }
+                            items(items = entries, key = { "${key}:${it.id}" }) { item ->
+                                LocalItemRow(
+                                    item = item,
+                                    allSongs = entries,
+                                    onPlay = { index ->
+                                        playerConnection?.playSongsStartingAt(entries, index)
+                                    },
+                                    onOpen = { navController.openLocalItem(it) },
+                                )
+                            }
+                        }
+                    }
+
+                    if (allItems.isEmpty() && orderedKeys.all { localResult.map[it].isNullOrEmpty() }) {
+                        item(key = "empty") {
+                            EmptyState(
+                                title = stringResource(R.string.search),
+                                message = stringResource(R.string.no_results_found),
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = metrics.block.dp),
+                            )
+                        }
                     }
                 }
             }
         }
+
+        PinnedTitleBar(
+            title = stringResource(R.string.search),
+            visible = titleCollapsed,
+        )
     }
 }
 
-/** 検索文字列の受け皿。枠は丸く塗り、中身は自前の入力で Material の面を使わない。 */
+/** 検索候補1行。虫眼鏡を添え、押すとそのまま検索へ送る。 */
+@Composable
+private fun SuggestionRow(
+    text: String,
+    onClick: () -> Unit,
+) {
+    val palette = applePalette()
+    val type = appleType()
+    val metrics = appleMetrics()
+
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) { onClick() }
+                .padding(horizontal = metrics.gutter.dp, vertical = metrics.sm.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.search),
+            contentDescription = null,
+            tint = palette.labelSecondary,
+            modifier = Modifier.size(17.dp),
+        )
+        Spacer(Modifier.width(metrics.md.dp))
+        Text(
+            text = text,
+            style = type.body,
+            color = palette.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** 検索文字列の受け皿。52dp の高さに10dpの角丸で塗り、中身は自前の入力（Material の面は使わない）。 */
 @Composable
 private fun SearchField(
     value: String,
@@ -224,9 +317,10 @@ private fun SearchField(
                     horizontal = metrics.gutter.dp,
                     vertical = metrics.xs.dp,
                 )
-                .clip(RoundedCornerShape(metrics.roundCorner.dp))
+                .height(SEARCH_FIELD_HEIGHT)
+                .clip(RoundedCornerShape(SEARCH_FIELD_CORNER))
                 .background(palette.surface)
-                .padding(horizontal = metrics.sm.dp, vertical = metrics.xs.dp),
+                .padding(horizontal = metrics.md.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -236,15 +330,16 @@ private fun SearchField(
             modifier = Modifier.size(18.dp),
         )
 
-        Spacer(Modifier.width(metrics.xs.dp))
+        Spacer(Modifier.width(metrics.sm.dp))
 
         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
             if (value.isEmpty()) {
                 Text(
-                    text = stringResource(R.string.search),
+                    text = stringResource(R.string.search_hint),
                     style = type.body,
                     color = palette.labelTertiary,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             BasicTextField(
@@ -260,6 +355,12 @@ private fun SearchField(
         }
     }
 }
+
+/** 検索フィールドの高さ。 */
+private val SEARCH_FIELD_HEIGHT = 52.dp
+
+/** 検索フィールドの角丸。 */
+private val SEARCH_FIELD_CORNER = 10.dp
 
 /** 端末内の1件を、曲なら再生行、それ以外は遷移行として描く。 */
 @Composable
@@ -353,17 +454,17 @@ private fun DiscoveryContent(
             val data = state.data
 
             if (data.moodAndGenres.isNotEmpty()) {
-                SectionHeader(title = stringResource(R.string.mood_and_genres))
+                SectionHeader(title = stringResource(R.string.browse_categories))
                 // Apple Music の検索画面と同じく2列で並べる。item の中は縦スクロールしか
                 // 許されないので、行は手で組む。奇数個のときは空きを均等に割り付ける。
                 Column(
                     modifier = Modifier.padding(horizontal = metrics.gutter.dp),
-                    verticalArrangement = Arrangement.spacedBy(metrics.sm.dp),
+                    verticalArrangement = Arrangement.spacedBy(metrics.md.dp),
                 ) {
                     data.moodAndGenres.chunked(2).forEach { pair ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(metrics.sm.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(metrics.md.dp)) {
                             pair.forEach { mood ->
-                                MoodTile(
+                                CategoryTile(
                                     title = mood.title,
                                     stripeColor = mood.stripeColor,
                                     onClick = { onOpenBrowse(mood.endpoint.browseId) },
@@ -425,41 +526,77 @@ private fun DiscoveryContent(
     }
 }
 
-/** 色帯だけのジャンルタイル。アートが無いので色そのものを面にする。 */
+/**
+ * 「カテゴリをブラウズ」のタイル。
+ *
+ * 横長の長方形（高さ90dp・角丸10dp）に、YouTube Music が返した色帯
+ * （`leftStripeColor`）をそのまま下地にする。その色から明るい側へ寄せた
+ * 2色の横グラデーションを重ね、白い太字のカテゴリ名を左下に載せる。
+ *
+ * このデータにはアートワークが無いので、色と文字だけで成立させる
+ * （無い画像をでっち上げることはしない）。
+ */
 @Composable
-private fun MoodTile(
+private fun CategoryTile(
     title: String,
     stripeColor: Long,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val palette = applePalette()
     val type = appleType()
-    val metrics = appleMetrics()
+    val base = Color(stripeColor)
 
     Box(
         modifier =
             modifier
                 .fillMaxWidth()
-                .height(76.dp)
-                .clip(RoundedCornerShape(metrics.cardCorner.dp))
-                .background(androidx.compose.ui.graphics.Color(stripeColor))
+                .height(CATEGORY_TILE_HEIGHT)
+                .clip(RoundedCornerShape(CATEGORY_TILE_CORNER))
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(base, base.lightened(CATEGORY_TILE_SPREAD)),
+                    ),
+                )
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                 ) { onClick() }
-                .padding(metrics.md.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
         contentAlignment = Alignment.BottomStart,
     ) {
         Text(
             text = title,
-            style = type.subhead.copy(fontWeight = FontWeight.SemiBold),
-            color = androidx.compose.ui.graphics.Color.White,
+            style = type.headline.copy(fontWeight = FontWeight.Bold),
+            color = Color.White,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Start,
         )
     }
+}
+
+/** カテゴリタイルの高さ。 */
+private val CATEGORY_TILE_HEIGHT = 90.dp
+
+/** カテゴリタイルの角丸。 */
+private val CATEGORY_TILE_CORNER = 10.dp
+
+/** グラデーション右端の明るさ倍率。帯の色を保ったまま右へ明るくする。 */
+private const val CATEGORY_TILE_SPREAD = 1.4f
+
+/** 色を HSV で捉えて明度を上げる。文字（白）を載せても潰れない範囲に留める。 */
+private fun Color.lightened(factor: Float): Color {
+    val argb =
+        android.graphics.Color.argb(
+            (alpha * 255).toInt().coerceIn(0, 255),
+            (red * 255).toInt().coerceIn(0, 255),
+            (green * 255).toInt().coerceIn(0, 255),
+            (blue * 255).toInt().coerceIn(0, 255),
+        )
+    val hsv = FloatArray(3)
+    android.graphics.Color.colorToHSV(argb, hsv)
+    hsv[2] = (hsv[2] * factor).coerceAtMost(1f)
+    return Color(android.graphics.Color.HSVToColor(hsv))
 }
 
 /** 端末内検索のカテゴリ見出し。 */

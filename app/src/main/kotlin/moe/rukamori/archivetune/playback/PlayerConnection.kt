@@ -17,6 +17,8 @@ import androidx.media3.common.Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM
 import androidx.media3.common.Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM
 import androidx.media3.common.Player.REPEAT_MODE_OFF
 import androidx.media3.common.Timeline
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -244,6 +246,65 @@ class PlayerConnection(
 
     fun moveQueueItemToNext(mediaItemIndex: Int) {
         service.moveQueueItemToNext(mediaItemIndex)
+    }
+
+    /**
+     * 表示中のキュー順を入れ替える。
+     *
+     * [queueWindows] は再生順に並んだ写しなので、そこから取り出した番号をそのまま
+     * [androidx.media3.Player.moveMediaItem] に渡せない。タイムラインを引き直して
+     * 先頭 period 番号が一致するメディア項目を探してから動かす。
+     *
+     * シャッフル中はタイムライン順がそのまま再生順にならないため、単純に移動すると
+     * 画面の並びが変わらない。そのときは**表示順のまま**並べ替えた配列を
+     * シャッフル順へ書き直す（先頭は再生中なので、曲が飛ぶことはない）。
+     *
+     * @param sourceWindow 並べ替え元。
+     * @param targetWindow 並べ替え先（ここへ移動する）。
+     */
+    @OptIn(UnstableApi::class)
+    fun moveQueueItem(
+        sourceWindow: Timeline.Window,
+        targetWindow: Timeline.Window,
+    ) {
+        if (player.mediaItemCount < 2 || player.currentMediaItemIndex < 0) return
+
+        val sourceIndex = mediaItemIndexOf(sourceWindow) ?: return
+        val targetIndex = mediaItemIndexOf(targetWindow) ?: return
+        if (sourceIndex == targetIndex) return
+
+        if (!player.shuffleModeEnabled) {
+            player.moveMediaItem(sourceIndex, targetIndex)
+            return
+        }
+
+        val mediaIndexByPeriod = HashMap<Int, Int>()
+        for (index in 0 until player.mediaItemCount) {
+            val window = player.currentTimeline.getWindow(index, Timeline.Window())
+            mediaIndexByPeriod[window.firstPeriodIndex] = index
+        }
+        val order = player.getQueueWindows().mapNotNull { mediaIndexByPeriod[it.firstPeriodIndex] }
+        if (order.size != player.mediaItemCount) return
+
+        val fromPosition = order.indexOf(sourceIndex)
+        val toPosition = order.indexOf(targetIndex)
+        if (fromPosition < 0 || toPosition < 0 || fromPosition == toPosition) return
+
+        val moved =
+            order
+                .toMutableList()
+                .apply { add(toPosition, removeAt(fromPosition)) }
+        localPlayer.setShuffleOrder(DefaultShuffleOrder(moved.toIntArray(), System.currentTimeMillis()))
+    }
+
+    /** [window] に当たるメディア項目番号。無ければ `null`。 */
+    private fun mediaItemIndexOf(window: Timeline.Window): Int? {
+        if (player.currentTimeline.isEmpty) return null
+        for (index in 0 until player.mediaItemCount) {
+            val candidate = player.currentTimeline.getWindow(index, Timeline.Window())
+            if (candidate.firstPeriodIndex == window.firstPeriodIndex) return index
+        }
+        return null
     }
 
     fun addToQueue(item: MediaItem) = addToQueue(listOf(item))

@@ -925,7 +925,16 @@ class HomeViewModel
                     val blockedArtistIds = database.getBlockedArtistIds().toSet()
                     val aiContentFilterPolicy = loadAiContentFilterPolicy()
                     val nextSections = YouTube.home(continuation).getOrNull() ?: return@launch
-                    val mergedSections = homePage.value?.sections.orEmpty() + nextSections.sections
+                    // 追加ページは元のページと食い違うセクションを返すことがある。
+                    // 同じ題のセクションが二重に並ばないよう、既出の題を積みながら
+                    // 新しいものだけを受け取り、中身の重複（同じ曲の二度出し）も落とす。
+                    val seenSectionTitles =
+                        homePage.value?.sections.orEmpty().mapTo(mutableSetOf()) { section -> section.title }
+                    val freshSections =
+                        nextSections.sections
+                            .filter { section -> seenSectionTitles.add(section.title) }
+                            .map { section -> section.copy(items = section.items.distinctBy { it.id }) }
+                    val mergedSections = homePage.value?.sections.orEmpty() + freshSections
                     val mergedPage =
                         nextSections.copy(
                             chips = homePage.value?.chips,

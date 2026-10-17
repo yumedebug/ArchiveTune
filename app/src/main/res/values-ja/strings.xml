@@ -1072,4 +1072,9 @@
     <string name="favorite">お気に入り</string>
     <string name="remove_from_favorites">お気に入りから削除</string>
     <string name="continue_playing">再生を続ける</string>
+    <string name="search_hint">アーティスト、曲、歌詞、その他</string>
+    <string name="browse_categories">カテゴリをブラウズ</string>
+    <string name="autoplaying_similar_music">似た曲を自動再生中</string>
+    <string name="listen_again">もう一度聴く</string>
+    <string name="output">出力先</string>
 </resources>

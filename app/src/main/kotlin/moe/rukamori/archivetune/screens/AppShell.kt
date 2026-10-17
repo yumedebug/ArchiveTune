@@ -234,7 +234,10 @@ fun AppShell(
                     LyricsScreen(onBack = { navController.popBackStack() })
                 }
                 composable(Routes.Queue) {
-                    QueueScreen(onBack = { navController.popBackStack() })
+                    QueueScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenLyrics = { navController.navigate(Routes.Lyrics) },
+                    )
                 }
                 composable(Routes.Settings) {
                     SettingsScreen(
