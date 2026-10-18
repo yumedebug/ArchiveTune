@@ -7,11 +7,9 @@
 
 package moe.rukamori.archivetune.screens
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -42,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
@@ -139,6 +138,15 @@ fun LyricsScreen(
         controlsVisible = true
         interactionTick++
     }
+
+    // 操作系の濃さ。消えるときだけ少しゆっくり引く。
+    // （AnimatedVisibility は外側の Column のスコープと衝突して解決できないため使わない）
+    val controlsAlpha by
+        animateFloatAsState(
+            targetValue = if (controlsVisible) 1f else 0f,
+            animationSpec = tween(if (controlsVisible) 180 else 260),
+            label = "lyricsControls",
+        )
 
     // 歌詞の読み込みは曲ごとに1回だけ。duration が後から確定し直しても
     // 再バインドすると取得がやり直されるため、1曲で固定する。
@@ -408,16 +416,14 @@ fun LyricsScreen(
                     )
 
                     // 調節できるもの（シーク・前後・再生）。一定時間で消え、触ると戻る。
-                    AnimatedVisibility(
-                        visible = controlsVisible,
-                        enter = fadeIn(animationSpec = tween(180)),
-                        exit = fadeOut(animationSpec = tween(220)),
-                        modifier = Modifier.align(Alignment.BottomCenter),
-                    ) {
+                    // 消えきったら組み立てを止めて、歌詞の上に何も残さない。
+                    if (controlsAlpha > 0.01f) {
                         Column(
                             modifier =
                                 Modifier
+                                    .align(Alignment.BottomCenter)
                                     .fillMaxWidth()
+                                    .alpha(controlsAlpha)
                                     .background(
                                         Brush.verticalGradient(
                                             colors = listOf(Color.Transparent, backdrop.bottom),
