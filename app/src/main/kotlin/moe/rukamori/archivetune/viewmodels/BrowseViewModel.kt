@@ -42,6 +42,13 @@ class BrowseViewModel
         private val loadBrowseContinuation: LoadBrowseContinuationUseCase,
     ) : ViewModel() {
         private val browseId = Uri.decode(savedStateHandle.get<String>("browseId").orEmpty()).trim()
+
+        // ムード・ジャンルは browseId が共通で、どのカテゴリかは params だけが持つ。
+        // 落とすと browse が 404 になるので、必ず引き回す。
+        private val params =
+            savedStateHandle
+                .get<String>("params")
+                ?.takeIf(String::isNotBlank)
         private val _screenState = MutableStateFlow<BrowseScreenState>(BrowseScreenState.Loading)
         val screenState = _screenState.asStateFlow()
         private val eventChannel = Channel<BrowseEvent>(Channel.BUFFERED)
@@ -69,7 +76,7 @@ class BrowseViewModel
             _screenState.value = BrowseScreenState.Loading
             loadJob =
                 viewModelScope.launch {
-                    loadBrowse(browseId)
+                    loadBrowse(browseId, params)
                         .onSuccess { result ->
                             continuation = result.continuation
                             _screenState.value =

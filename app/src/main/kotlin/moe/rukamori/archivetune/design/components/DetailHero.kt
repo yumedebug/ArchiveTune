@@ -11,11 +11,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -49,7 +49,9 @@ import moe.rukamori.archivetune.design.appleType
  *
  * @param subtitle アーティスト名や件数など。`null` なら描画しない。
  * @param metadata 年や総再生時間など、副次行。`null` なら描画しない。
- * @param onPlay 中央の再生ボタン。`null` なら出さない（検索結果など）。
+ * @param onPlay 再生ボタン。`null` なら出さない（検索結果など）。
+ * @param onShuffle シャッフルボタン。Apple Music のアーティスト画面と同じく
+ *   再生の隣に並べる。`null` なら出さない。
  * @param artworkShape アートの形。アーティストは正円を渡す。
  */
 @Composable
@@ -61,6 +63,7 @@ fun DetailHero(
     subtitle: String? = null,
     metadata: String? = null,
     onPlay: (() -> Unit)? = null,
+    onShuffle: (() -> Unit)? = null,
     artworkShape: Shape = RoundedCornerShape(12.dp),
 ) {
     val palette = applePalette()
@@ -121,8 +124,8 @@ fun DetailHero(
                 )
             }
 
-            if (onPlay != null) {
-                PlayButton(onClick = onPlay, modifier = Modifier.padding(top = metrics.md.dp))
+            if (onPlay != null || onShuffle != null) {
+                HeroActions(onPlay = onPlay, onShuffle = onShuffle)
             }
 
             Spacer(Modifier.width(metrics.block.dp))
@@ -131,44 +134,91 @@ fun DetailHero(
 }
 
 /**
- * 再生ボタン。
+ * 見出しの下に置く「シャッフル」と「再生」。
  *
- * アクセント色の塗りに白い再生アイコン。Material の FAB は影と色が大きく、
- * 面が二重になるので塗りとアイコンだけで作っている。
+ * アルバム・プレイリストの見出し（`DetailActionsRow`）と同じ並びに揃える。
+ * 左が控えめなシャッフル、右が幅いっぱいの再生。**どの再生リストでもこの2つが
+ * 出ている**状態を作るのが目的なので、片方だけのときも同じ位置に置く。
  */
 @Composable
-fun PlayButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    label: String = stringResource(R.string.play),
+private fun HeroActions(
+    onPlay: (() -> Unit)?,
+    onShuffle: (() -> Unit)?,
 ) {
-    val palette = applePalette()
     val type = appleType()
+    val metrics = appleMetrics()
+    val translucent = Color.White.copy(alpha = 0.14f)
 
     Row(
         modifier =
-            modifier
-                .clip(RoundedCornerShape(999.dp))
-                .background(palette.accent)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                ) { onClick() }
-                .padding(horizontal = 22.dp, vertical = 11.dp),
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    start = metrics.gutter.dp,
+                    end = metrics.gutter.dp,
+                    top = metrics.section.dp,
+                ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
+        horizontalArrangement = Arrangement.spacedBy(metrics.sm.dp),
     ) {
-        Icon(
-            painter = painterResource(R.drawable.play),
-            contentDescription = null,
-            tint = Color.White,
-            modifier = Modifier.size(18.dp),
-        )
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = label,
-            style = type.subhead.copy(fontWeight = FontWeight.SemiBold),
-            color = Color.White,
-        )
+        if (onShuffle != null) {
+            Row(
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(translucent)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { onShuffle() }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.shuffle),
+                    contentDescription = stringResource(R.string.shuffle),
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = stringResource(R.string.shuffle),
+                    style = type.subhead.copy(fontWeight = FontWeight.SemiBold),
+                    color = Color.White,
+                )
+            }
+        }
+
+        if (onPlay != null) {
+            Row(
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .height(52.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color.White)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { onPlay() }
+                        .padding(horizontal = metrics.gutter.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.play),
+                    contentDescription = null,
+                    tint = Color.Black,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(metrics.sm.dp))
+                Text(
+                    text = stringResource(R.string.play),
+                    style = type.headline,
+                    color = Color.Black,
+                )
+            }
+        }
     }
 }
+

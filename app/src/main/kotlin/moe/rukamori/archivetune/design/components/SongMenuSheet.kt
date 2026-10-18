@@ -90,11 +90,10 @@ fun SongMenuSheet(
             }
         },
     ) {
-        // 地はガラスにする。シートは別のウィンドウに出るため背後の捕捉は渡さず、
-        // 面の不透明度だけで透けるようにして、下の画面がうっすら残るようにする。
+        // 地は不透明な面。リキッドグラス（背後ブラー）は全廃したため、シートは
+        // 塗りと境界線だけで組む。下の画面が透けないぶんラベルが読みやすい。
         GlassSurface(
             shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
-            hazeState = null,
         ) {
             Column {
                 MenuHeader(song = song)

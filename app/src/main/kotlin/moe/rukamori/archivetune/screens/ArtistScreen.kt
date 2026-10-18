@@ -24,6 +24,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
@@ -57,12 +58,14 @@ import moe.rukamori.archivetune.viewmodels.ArtistViewModel
  * 画面の並び順はViewModelが用意したものをそのまま使う。並べ替えや絞り込みは持たない。
  *
  * @param onBack 戻る矢印。
+ * @param onOpenArtist 似たアーティストのカード。アーティスト画面へ進む。
  */
 @Composable
 fun ArtistScreen(
     onBack: () -> Unit,
     onOpenAlbum: (String) -> Unit,
     onOpenPlaylist: (String) -> Unit,
+    onOpenArtist: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val viewModel: ArtistViewModel = hiltViewModel()
@@ -90,6 +93,23 @@ fun ArtistScreen(
 
     val localItems = librarySongs.map { it.toMediaItem() }
 
+    // 再生の入口。端末内に曲があればそこを、無ければオンラインの endpoint を起点にする。
+    // シャッフルは同じキューを立ててから並べ替える（playQueue はキュー開始時に
+    // シャッフルを一度下げるため、後から立てる）。
+    val startPlayback: (Boolean) -> Unit = { shuffled ->
+        when {
+            localItems.isNotEmpty() ->
+                playerConnection?.playQueue(
+                    ListQueue(title = name, items = localItems),
+                )
+            else ->
+                remoteArtist?.playEndpoint?.let { endpoint ->
+                    playerConnection?.playQueue(YouTubeQueue(endpoint))
+                }
+        }
+        if (shuffled) playerConnection?.player?.shuffleModeEnabled = true
+    }
+
     LazyColumn(
         modifier =
             modifier
@@ -108,20 +128,11 @@ fun ArtistScreen(
                 title = name,
                 thumbnailUrl = thumbnailUrl,
                 onBack = onBack,
-                onPlay = {
-                    when {
-                        // 端末内に曲があれば、そこを起点にする。
-                        localItems.isNotEmpty() ->
-                            playerConnection?.playQueue(
-                                ListQueue(title = name, items = localItems),
-                            )
-                        // 無ければオンラインの再生 endpoint を起点にする。
-                        else ->
-                            remoteArtist?.playEndpoint?.let { endpoint ->
-                                playerConnection?.playQueue(YouTubeQueue(endpoint))
-                            }
-                    }
-                },
+                onPlay = { startPlayback(false) },
+                // Apple Music のアーティスト画面と同じく、再生の隣にシャッフルを置く。
+                onShuffle = { startPlayback(true) },
+                // アーティストの絵は正円（Apple Music と同じ）。
+                artworkShape = CircleShape,
             )
         }
 
@@ -203,11 +214,13 @@ fun ArtistScreen(
                                     )
 
                                 is ArtistItem ->
-                                    // アーティストからアーティストへは進まない（循環するため）。
+                                    // 似たアーティスト。アーティスト画面へ進む
+                                    // （以前はプレイリストのルートへ渡していて、
+                                    // アーティストIDでプレイリストを開こうとしていた）。
                                     MediaCard(
                                         title = item.title,
                                         thumbnailUrl = item.thumbnail,
-                                        onClick = { onOpenPlaylist(item.id) },
+                                        onClick = { onOpenArtist(item.id) },
                                     )
 
                                 is PlaylistItem ->

@@ -9,7 +9,6 @@ package moe.rukamori.archivetune.screens
 
 import android.content.Context
 import android.content.Intent
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -45,12 +44,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -156,20 +153,9 @@ fun ImmersiveDetailScaffold(
                     .fillMaxSize()
                     .background(background),
         ) {
-            // アートの色を背景へ広げる層。1枚の絵を全画面へ引き伸ばしてから溶かす。
-            backdrop.artwork?.let { artwork ->
-                Image(
-                    bitmap = artwork,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    alpha = 0.38f,
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .blur(48.dp),
-                )
-            }
             // 下へ向かって暗く落とすスクリム。白い文字の視認性はこちらが担保する。
+            // 以前はアートを全画面へ引き伸ばしてブラーしていたが、リキッドグラスを
+            // 全廃したので、ここは抽出色のグラデーションだけにする。
             Box(
                 modifier =
                     Modifier
@@ -187,7 +173,7 @@ fun ImmersiveDetailScaffold(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            // 下端のガラス（ミニプレイヤー＋ナビ＋ジェスチャーバー）の分だけ余白を確保する。
+            // 下端の帯（ミニプレイヤー＋ナビ＋ジェスチャーバー）の分だけ余白を確保する。
             contentPadding = PaddingValues(bottom = bottomInsetDp + metrics.block.dp),
         ) {
             item(key = "hero") {

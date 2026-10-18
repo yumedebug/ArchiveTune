@@ -29,13 +29,16 @@ class LoadBrowseUseCase
     constructor(
         private val repository: BrowseRepository,
     ) {
-        suspend operator fun invoke(browseId: String): Result<BrowseLoadResult> {
+        suspend operator fun invoke(
+            browseId: String,
+            params: String? = null,
+        ): Result<BrowseLoadResult> {
             val validatedBrowseId =
                 browseId
                     .trim()
                     .takeIf(String::isNotBlank)
                     ?: return Result.failure(IllegalArgumentException())
-            return repository.load(validatedBrowseId).map { page ->
+            return repository.load(validatedBrowseId, params).map { page ->
                 BrowseLoadResult(
                     uiState =
                         BrowseUiState(

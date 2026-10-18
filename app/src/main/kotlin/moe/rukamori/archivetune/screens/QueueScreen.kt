@@ -48,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -355,7 +356,12 @@ fun QueueScreen(
                                 SwipeToDismissBox(
                                     state = dismissState,
                                     enableDismissFromStartToEnd = false,
-                                    backgroundContent = { QueueDeleteBackground() },
+                                    // 削除面は**スワイプした分だけ**出す。行そのものは
+                                    // 地色を持たない（背後のジャケットを見せている）ため、
+                                    // 常時描くと赤い帯が全行に見えてしまう。
+                                    backgroundContent = {
+                                        QueueDeleteBackground(progress = dismissState.progress)
+                                    },
                                     onDismiss = {
                                         if (!removeQueueWindow(playerConnection.player, window)) {
                                             // タイムラインが入れ替わって外せなかった場合、行が画面外に
@@ -716,9 +722,13 @@ private fun QueueDragHandle(modifier: Modifier = Modifier) {
  *
  * 行をスライドさせた方向の裏に赤い面と「削除」を置く。
  * 色は [moe.rukamori.archivetune.design.ApplePalette.error]、文字は面の上なので白で固定。
+ *
+ * [progress] はスワイプ量（0〜1）。行そのものは地色を持たず背後のジャケットを
+ * 透かしているので、常時描くと赤い帯が全行に見えてしまう。必ずスワイプ量で
+ * 不透明度を落として、掴んでいる行だけに出す。
  */
 @Composable
-private fun RowScope.QueueDeleteBackground() {
+private fun RowScope.QueueDeleteBackground(progress: Float) {
     val palette = applePalette()
     val type = appleType()
     val metrics = appleMetrics()
@@ -727,6 +737,7 @@ private fun RowScope.QueueDeleteBackground() {
         modifier =
             Modifier
                 .fillMaxSize()
+                .graphicsLayer { alpha = progress.coerceIn(0f, 1f) }
                 .background(palette.error),
         contentAlignment = Alignment.CenterEnd,
     ) {

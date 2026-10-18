@@ -40,13 +40,23 @@ object Routes {
     const val Artist = "artist/{artistId}"
     const val OnlinePlaylist = "online_playlist/{playlistId}"
     const val LocalPlaylist = "local_playlist/{playlistId}"
-    const val Browse = "browse/{browseId}"
+
+    /**
+     * カテゴリ（ムード／ジャンル）やランキングの一覧。
+     *
+     * `params` は**必ず引き回す**こと。YouTube Music のムード・ジャンルのタイルは
+     * `browseId` が全タイル共通（`FEmusic_moods_and_genres_category`）で、
+     * どのカテゴリかは `params` だけが持つ。落とすと browse が 404 になり、
+     * 画面は「不明なエラー」で止まる。
+     */
+    const val Browse = "browse/{browseId}?params={params}"
     const val OnlineSearch = "search/{encodedQuery}"
 
     const val ArgAlbumId = "albumId"
     const val ArgArtistId = "artistId"
     const val ArgPlaylistId = "playlistId"
     const val ArgBrowseId = "browseId"
+    const val ArgParams = "params"
     const val ArgEncodedQuery = "encodedQuery"
 
     /** ボトムナビに載せるタブのルート順（Home → New → Radio → Library → Search）。 */
@@ -64,5 +74,14 @@ object Routes {
 
     fun localPlaylist(playlistId: String) = "local_playlist/$playlistId"
 
-    fun browse(browseId: String) = "browse/$browseId"
+    /**
+     * カテゴリ一覧へ送る。
+     *
+     * [params] はクエリ引数として必ず載せる（`null` のときは空文字）。
+     * 引数名は [ArgParams] と一致させること。
+     */
+    fun browse(
+        browseId: String,
+        params: String? = null,
+    ) = "browse/$browseId?params=${params.orEmpty()}"
 }

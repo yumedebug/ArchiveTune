@@ -148,7 +148,10 @@ fun RadioScreen(
                         ) { _, section ->
                             RadioSection(
                                 section = section,
-                                onOpen = { tile -> navController.navigate(Routes.browse(tile.browseId)) },
+                                onOpen = { tile ->
+                                    // params を落とすと browse が 404 になる。
+                                    navController.navigate(Routes.browse(tile.browseId, tile.params))
+                                },
                             )
                         }
                     }
@@ -182,7 +185,7 @@ private fun RadioSection(
             // 複数並ぶため、`browseId` 単体では重複して例外になる。
             itemsIndexed(
                 items = section.tiles,
-                key = { index, tile -> "$index:${tile.browseId}" },
+                key = { index, tile -> "$index:${tile.browseId}:${tile.params.orEmpty()}" },
             ) { _, tile ->
                 RadioTile(tile = tile, onClick = { onOpen(tile) })
             }

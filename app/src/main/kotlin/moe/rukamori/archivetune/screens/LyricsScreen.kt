@@ -179,7 +179,9 @@ fun LyricsScreen(
     LaunchedEffect(currentIndex, viewportHeight, lines.size) {
         if (currentIndex !in lines.indices || viewportHeight <= 0) return@LaunchedEffect
         val offset = with(density) { -(viewportHeight * ACTIVE_LINE_ANCHOR).toInt() }
-        listState.animateScrollToItem(currentIndex, offset)
+        // LazyColumn の index 0 は先頭の余白（lead）なので、行の index は 1 つずれる。
+        // currentIndex をそのまま渡すと1行手前を掴んで、現在行が常に1行分下へずれる。
+        listState.animateScrollToItem(currentIndex + 1, offset)
     }
 
     Column(

@@ -110,12 +110,15 @@ private val DISMISS_DRAG = 110.dp
  * @param onDismiss 下向きの取っ手。プレイヤーを閉じる。
  * @param onOpenLyrics 歌詞ボタン。
  * @param onOpenQueue キューボタン。
+ * @param onOpenArtist 曲名の下のアーティスト名をタップしたとき（Apple Music と同じく
+ *   アーティスト画面へ進む）。
  */
 @Composable
 fun PlayerScreen(
     onDismiss: () -> Unit,
     onOpenLyrics: () -> Unit,
     onOpenQueue: () -> Unit,
+    onOpenArtist: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val playerConnection = LocalPlayerConnection.current ?: return
@@ -152,9 +155,9 @@ fun PlayerScreen(
         viewModel.events.collect { event ->
             when (event) {
                 ImmersivePlayerEvent.OpenMenu -> showSongMenu = true
-                is ImmersivePlayerEvent.OpenAlbum,
-                is ImmersivePlayerEvent.OpenArtist,
-                -> Unit // ここでは詳細画面へは進めない（再生に絞る画面のため）。
+                is ImmersivePlayerEvent.OpenArtist -> onOpenArtist(event.id)
+                // アルバムはプレイヤーからは進まない（再生に絞る画面のため）。
+                is ImmersivePlayerEvent.OpenAlbum -> Unit
             }
         }
     }
@@ -214,6 +217,9 @@ fun PlayerScreen(
 
     val title = model?.title.orEmpty()
     val artistNames = model?.artists.orEmpty().joinToString(", ") { it.name }
+    // 名前の下をタップしたときの行き先。ID を持つアーティストが先頭のものを選ぶ
+    // （Apple Music と同じく、曲の並びの代表＝先頭のアーティストへ進む）。
+    val artistId = model?.artists?.firstOrNull { !it.id.isNullOrBlank() }?.id
     val deviceName = model?.outputDevice?.name.orEmpty().ifBlank { model?.sourceTitle.orEmpty() }
 
     Column(
@@ -346,13 +352,31 @@ fun PlayerScreen(
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (artistNames.isNotEmpty()) {
+                    // タップでアーティスト画面へ。ID が取れない曲（ローカル等）では
+                    // 触れないただの文字のままにして、死んだリンクを作らない。
+                    val onArtistClick =
+                        artistId?.let { id -> { onOpenArtist(id) } }
                     Text(
                         text = artistNames,
                         style = type.title3,
                         color = Color.White.copy(alpha = 0.66f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 1.dp),
+                        modifier =
+                            Modifier
+                                .padding(top = 1.dp)
+                                .then(
+                                    if (onArtistClick == null) {
+                                        Modifier
+                                    } else {
+                                        Modifier.clickable(
+                                            interactionSource =
+                                                remember { MutableInteractionSource() },
+                                            indication = null,
+                                            onClick = onArtistClick,
+                                        )
+                                    },
+                                ),
                     )
                 }
             }
@@ -551,8 +575,7 @@ fun PlayerScreen(
         }
     }
 
-    // 右上の「…」から一覧と同じ曲メニューを開く。全画面プレイヤーから
-    // アーティストやアルバムの画面へは移動しないため、再生に絞る操作だけ出す。
+    // 右上の「…」から一覧と同じ曲メニューを開く。ここからアーティスト画面へも進める。
     if (showSongMenu) {
         currentSong?.let { song ->
             SongMenuSheet(
@@ -569,6 +592,12 @@ fun PlayerScreen(
                 onPlayRadio = {
                     playerConnection.playRadioFrom(song)
                     showSongMenu = false
+                },
+                onOpenArtist = artistId?.let { id ->
+                    {
+                        showSongMenu = false
+                        onOpenArtist(id)
+                    }
                 },
             )
         }

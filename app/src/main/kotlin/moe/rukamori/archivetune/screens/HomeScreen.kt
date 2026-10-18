@@ -300,8 +300,8 @@ fun HomeScreen(
                                         onPlayAll = { endpoint ->
                                             playerConnection?.playQueue(YouTubeQueue.playlist(endpoint))
                                         },
-                                        onOpenDetail = { browseId ->
-                                            navController.navigate(Routes.browse(browseId))
+                                        onOpenDetail = { browseId, params ->
+                                            navController.navigate(Routes.browse(browseId, params))
                                         },
                                         onOpenCard = { card ->
                                             openFeaturedCard(card, navController, playerConnection)
@@ -328,8 +328,8 @@ fun HomeScreen(
                                         onPlayAll = { endpoint ->
                                             playerConnection?.playQueue(YouTubeQueue.playlist(endpoint))
                                         },
-                                        onOpenDetail = { browseId ->
-                                            navController.navigate(Routes.browse(browseId))
+                                        onOpenDetail = { browseId, params ->
+                                            navController.navigate(Routes.browse(browseId, params))
                                         },
                                         onOpenCard = { card ->
                                             openFeaturedCard(card, navController, playerConnection)
@@ -449,7 +449,8 @@ private fun layoutOf(section: HomePage.Section): SectionLayout =
  *
  * @param onOpenItem カードを1枚開く。
  * @param onPlayAll 見出しの「すべて再生」。
- * @param onOpenDetail 見出し右の矢印（より多く表示する）。
+ * @param onOpenDetail 見出し右の矢印（より多く表示する）。browseId と、どのカテゴリかを
+ *   決める params の組で渡す（ムード・ジャンルは params が無いと 404 になる）。
  * @param onOpenCard 特集カードを開く。
  */
 @Composable
@@ -457,7 +458,7 @@ private fun HomeSection(
     section: HomePage.Section,
     onOpenItem: (YTItem) -> Unit,
     onPlayAll: (WatchEndpoint) -> Unit,
-    onOpenDetail: (String) -> Unit,
+    onOpenDetail: (String, String?) -> Unit,
     onOpenCard: (HomePage.Section.FeaturedCard) -> Unit,
 ) {
     val metrics = appleMetrics()
@@ -466,7 +467,8 @@ private fun HomeSection(
     // スマートキャストできない。一旦ローカルへ落とさないとラムダ内でも
     // 「Nullチェックができない」コンパイルエラーになる。
     val playEndpoint = section.playEndpoint
-    val detailBrowseId = section.endpoint?.browseId
+    val detailEndpoint = section.endpoint
+    val detailBrowseId = detailEndpoint?.browseId
 
     Column(modifier = Modifier.padding(top = metrics.sm.dp)) {
         SectionHeader(
@@ -480,7 +482,7 @@ private fun HomeSection(
             onAction =
                 when {
                     playEndpoint != null -> { { onPlayAll(playEndpoint) } }
-                    detailBrowseId != null -> { { onOpenDetail(detailBrowseId) } }
+                    detailBrowseId != null -> { { onOpenDetail(detailBrowseId, detailEndpoint?.params) } }
                     else -> null
                 },
         )
@@ -677,7 +679,8 @@ private fun openFeaturedCard(
 ) {
     val browseId = card.endpoint?.browseId
     if (browseId != null) {
-        navController.navigate(Routes.browse(browseId))
+        // ムード・ジャンルのカードは params が無いと browse が 404 になる。
+        navController.navigate(Routes.browse(browseId, card.endpoint?.params))
         return
     }
     val endpoint = card.playEndpoint ?: card.shuffleEndpoint ?: card.radioEndpoint

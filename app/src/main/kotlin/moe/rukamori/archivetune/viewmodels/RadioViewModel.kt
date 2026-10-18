@@ -45,6 +45,14 @@ data class RadioTileUiModel(
     val title: String,
     val stripeColor: Long,
     val browseId: String,
+    /**
+     * どのカテゴリかを決める追加パラメータ。
+     *
+     * YouTube Music のムード／ジャンルのタイルは `browseId` が全タイル共通
+     * （`FEmusic_moods_and_genres_category`）で、区別は `params` だけが持つ。
+     * 落とすと browse が 404 になる。
+     */
+    val params: String?,
 )
 
 @Immutable
@@ -120,6 +128,7 @@ class RadioViewModel
                                 title = item.title,
                                 stripeColor = item.stripeColor,
                                 browseId = item.endpoint.browseId,
+                                params = item.endpoint.params,
                             )
                         },
             )

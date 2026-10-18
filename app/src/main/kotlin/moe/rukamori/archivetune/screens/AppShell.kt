@@ -39,11 +39,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
+import androidx.navigation.navArgument
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
@@ -60,21 +60,16 @@ import moe.rukamori.archivetune.models.MediaMetadata
 /**
  * 新UIの共通シェル。
  *
- * 画面は [NavHost] が持つ。浮遊ナビとミニプレイヤーはその**外**に置くことで、
- * 「下端のガラスが画面の背後を覆っている」状態を作る。両者を同じ列に並べると
- * ブラー対象に自身が混ざるので、NavHost 側だけを [dev.chrisbanes.haze.hazeSource] に
- * し、ガラス面だけを消費者側に回す。
+ * 画面は [NavHost] が持つ。ボトムナビとミニプレイヤーはその**外**に置く。
+ * 面はどちらも不透明なので、背後の画面を捕捉する仕組み（Haze）は持たない。
  *
  * 下端の重なりはシェルが一括で決め、子画面は [LocalPlayerAwareWindowInsets] を読むだけで
  * よい。全画面プレイヤー・歌詞・キューでは下端の面を隠すので、そのときだけインセットも
  * 縮める（背後に余白を残さない）。
- *
- * @param hazeState 背後コンテンツの捕捉先。[MiniPlayer] と [GlassNavigationBar] が読む。
  */
 @Composable
 fun AppShell(
     navController: NavHostController,
-    hazeState: HazeState,
     modifier: Modifier = Modifier,
 ) {
     val connection = LocalPlayerConnection.current
@@ -176,8 +171,7 @@ fun AppShell(
                 startDestination = Routes.Home,
                 modifier =
                     Modifier
-                        .fillMaxSize()
-                        .hazeSource(hazeState),
+                        .fillMaxSize(),
                 enterTransition = {
                     when (targetState.destination.route) {
                         // タブの入れ替えは重ね替え。面が見え切っているので動きを立てない。
@@ -228,6 +222,7 @@ fun AppShell(
                         onDismiss = { navController.popBackStack() },
                         onOpenLyrics = { navController.navigate(Routes.Lyrics) },
                         onOpenQueue = { navController.navigate(Routes.Queue) },
+                        onOpenArtist = { id -> navController.navigate(Routes.artist(id)) },
                     )
                 }
                 composable(Routes.Lyrics) {
@@ -264,6 +259,7 @@ fun AppShell(
                     ArtistScreen(
                         onBack = { navController.popBackStack() },
                         onOpenAlbum = { id -> navController.navigate(Routes.album(id)) },
+                        onOpenArtist = { id -> navController.navigate(Routes.artist(id)) },
                         onOpenPlaylist = { id -> navController.navigate(Routes.onlinePlaylist(id)) },
                     )
                 }
@@ -277,7 +273,21 @@ fun AppShell(
                 composable(Routes.LocalPlaylist) {
                     LocalPlaylistScreen(onBack = { navController.popBackStack() })
                 }
-                composable(Routes.Browse) {
+                composable(
+                    route = Routes.Browse,
+                    arguments =
+                        listOf(
+                            navArgument(Routes.ArgBrowseId) {
+                                type = NavType.StringType
+                            },
+                            // ムード・ジャンルはこの params にしか「どのカテゴリか」が無い。
+                            // 省略可能にして、渡されない画面（ランキング等）も通す。
+                            navArgument(Routes.ArgParams) {
+                                type = NavType.StringType
+                                nullable = true
+                            },
+                        ),
+                ) {
                     BrowseScreen(
                         onBack = { navController.popBackStack() },
                         onOpenAlbum = { id -> navController.navigate(Routes.album(id)) },

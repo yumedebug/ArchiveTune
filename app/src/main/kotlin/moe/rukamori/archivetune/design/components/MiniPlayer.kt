@@ -39,10 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -58,7 +55,6 @@ import moe.rukamori.archivetune.design.appleMetrics
 import moe.rukamori.archivetune.design.applePalette
 import moe.rukamori.archivetune.design.appleType
 import moe.rukamori.archivetune.extensions.togglePlayPause
-import moe.rukamori.archivetune.screens.rememberArtworkBackdrop
 
 /** 再生位置の測り直し間隔（再生中）。 */
 private const val POSITION_POLL_MS = 500L
@@ -76,8 +72,10 @@ private val PROGRESS_HEIGHT = 2.dp
  * 面は他社のプレイヤーの記号になるため使わない。Apple Music のタブバーと続けて
  * 1本の操作帯に見えるよう、上端のヘアラインを進行バーと兼ねる。
  *
- * 背景はジャケットから抜いた色を、テーマに合わせて暗く／明るく寄せたもの
- * （[rememberArtworkBackdrop]）。文字は乗った面の明るさから自動で反転する。
+ * 背景はジャケットの抽出色ではなく、[moe.rukamori.archivetune.design.ApplePalette.surface]
+ * の**不透明な面**にする。リキッドグラスを全廃した方針に合わせたもので、
+ * 明るいジャケットの上でも曲名とアーティスト名が沈まない。文字は面の色に
+ * 対する既定の前景色（白／黒）で固定する。
  *
  * - **タップ** → 全画面プレイヤーへ
  * - **横スワイプ** → 前の曲／次の曲（しきい値まで引っ張ると発火し、指を離すと戻る）
@@ -103,25 +101,10 @@ fun MiniPlayer(
     val metrics = appleMetrics()
     val density = LocalDensity.current
 
-    // アートから抜いた2色。解析が終わるまでは既定の灰が入る。
-    val backdrop = rememberArtworkBackdrop(
-        mediaId = metadata.id,
-        thumbnailUrl = metadata.thumbnailUrl,
-    )
-
-    // ライトテーマなら白へ、ダークテーマなら黒へ寄せて面を作る。
-    // ミニプレイヤーは常に下端にあるため、抽出色のままでは上部の明るい背景に
-    // 浮いてしまう。テーマ側へ寄せて「置かれている場所」と同じ明度帯に揃える。
-    val isLightTheme = palette.background.luminance() > 0.5f
-    val container =
-        if (isLightTheme) {
-            lerp(backdrop.top, Color.White, CONTAINER_TOWARD_WHITE)
-        } else {
-            lerp(backdrop.top, Color.Black, CONTAINER_TOWARD_BLACK)
-        }
-    // 面の明るさから文字色を決める。抽出色の差で可読性が落ちないようにする。
-    val contentColor =
-        if (container.luminance() > 0.45f) Color(0xFF111111) else Color.White
+    // 面は不透明に固定する。リキッドグラス（抽出色＋ブラー）は使わない。
+    val container = palette.surface
+    val contentColor = palette.onSurface
+    val secondaryColor = palette.labelSecondary
 
     // 進行バー。曲ごとに測り直す。
     var positionMs by remember(metadata.id) { mutableLongStateOf(0L) }
@@ -221,7 +204,7 @@ fun MiniPlayer(
                     Text(
                         text = metadata.artists.joinToString(", ") { it.name },
                         style = type.footnote,
-                        color = contentColor.copy(alpha = 0.72f),
+                        color = secondaryColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -291,8 +274,3 @@ private fun MiniTransportButton(
     }
 }
 
-/** ライトへ寄せる割合。抽出色を残したまま明るい面にする。 */
-private const val CONTAINER_TOWARD_WHITE = 0.72f
-
-/** ダークへ寄せる割合。抽出色を残したまま沈んだ面にする。 */
-private const val CONTAINER_TOWARD_BLACK = 0.58f

@@ -172,7 +172,9 @@ fun SearchScreen(
                             onOpenSong = { item -> playerConnection?.playYtSong(item) },
                             onOpenAlbum = { id -> navController.navigate(Routes.album(id)) },
                             onOpenArtist = { id -> navController.navigate(Routes.artist(id)) },
-                            onOpenBrowse = { id -> navController.navigate(Routes.browse(id)) },
+                            onOpenBrowse = { browseId, params ->
+                                navController.navigate(Routes.browse(browseId, params))
+                            },
                         )
                     }
                 } else {
@@ -413,7 +415,8 @@ private fun DiscoveryContent(
     onOpenSong: (SongItem) -> Unit,
     onOpenAlbum: (String) -> Unit,
     onOpenArtist: (String) -> Unit,
-    onOpenBrowse: (String) -> Unit,
+    // ムード・ジャンルは browseId が共通なので、どのカテゴリかを持つ params も渡す。
+    onOpenBrowse: (String, String?) -> Unit,
 ) {
     val metrics = appleMetrics()
 
@@ -467,7 +470,9 @@ private fun DiscoveryContent(
                                 CategoryTile(
                                     title = mood.title,
                                     stripeColor = mood.stripeColor,
-                                    onClick = { onOpenBrowse(mood.endpoint.browseId) },
+                                    onClick = {
+                                        onOpenBrowse(mood.endpoint.browseId, mood.endpoint.params)
+                                    },
                                     modifier = Modifier.weight(1f),
                                 )
                             }

@@ -26,7 +26,10 @@ data class BrowsePage(
 class BrowseRepository
     @Inject
     constructor() {
-        suspend fun load(browseId: String): Result<BrowsePage> =
+        suspend fun load(
+            browseId: String,
+            params: String? = null,
+        ): Result<BrowsePage> =
             withContext(Dispatchers.IO) {
                 val result =
                     if (browseId == PODCAST_LIBRARY_BROWSE_ID) {
@@ -38,7 +41,9 @@ class BrowseRepository
                             )
                         }
                     } else {
-                        YouTube.browse(browseId, params = null).map { page ->
+                        // ムード・ジャンルのタイルは browseId が共通で、どのカテゴリかは
+                        // params だけが持つ。null で送ると 404 になるので必ず渡す。
+                        YouTube.browse(browseId, params = params).map { page ->
                             BrowsePage(
                                 title = page.title,
                                 items = page.items.flatMap { section -> section.items },

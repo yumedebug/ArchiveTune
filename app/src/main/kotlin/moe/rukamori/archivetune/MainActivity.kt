@@ -178,8 +178,6 @@ import coil3.request.allowHardware
 import coil3.toBitmap
 import com.valentinilk.shimmer.LocalShimmerTheme
 import dagger.hilt.android.AndroidEntryPoint
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -260,7 +258,6 @@ import moe.rukamori.archivetune.playback.queues.LocalAlbumRadio
 import moe.rukamori.archivetune.playback.queues.Queue
 import moe.rukamori.archivetune.playback.queues.YouTubeAlbumRadio
 import moe.rukamori.archivetune.playback.queues.YouTubeQueue
-import moe.rukamori.archivetune.design.LocalBackdropHazeState
 import moe.rukamori.archivetune.design.AppleTheme
 import moe.rukamori.archivetune.screens.AppShell
 import moe.rukamori.archivetune.screens.OnlineSearchResultArgument
@@ -771,14 +768,9 @@ class MainActivity : ComponentActivity() {
                         this@MainActivity.navController = navController
                         onDispose {}
                     }
-                    // 背後の画面を捕捉して、浮遊ナビとミニプレイヤーのガラス面に使う。
-                    // 置き場所をシェルに寄せたのは、ブラー対象を NavHost の内容だけに
-                    // 限定するため。ガラス面と同じ列に並べると自身が混ざる。
-                    val hazeState = rememberHazeState()
-
                     // 画面に渡すのはここに列挙したものだけ。
                     // 各画面はコンテナを生成せず、共有されたものを読む。
-                    // 下端の重なり（ミニプレイヤー・浮遊ナビ）はシェルが決めるので、
+                    // 下端の重なり（ミニプレイヤー・ナビ）はシェルが決めるので、
                     // ここでは素のシステムバーを渡し、シェルが内側で差し替える。
                     val playerAwareWindowInsets = WindowInsets.systemBars
 
@@ -788,11 +780,9 @@ class MainActivity : ComponentActivity() {
                         LocalPlayerAwareWindowInsets provides playerAwareWindowInsets,
                         LocalDownloadUtil provides downloadUtil,
                         LocalSyncUtils provides syncUtils,
-                        LocalBackdropHazeState provides hazeState,
                     ) {
                         AppShell(
                             navController = navController,
-                            hazeState = hazeState,
                         )
                     }
 
