@@ -7,21 +7,29 @@
 
 package moe.rukamori.archivetune.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,6 +46,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,6 +65,9 @@ import moe.rukamori.archivetune.design.components.CurrentTrackHeader
 import moe.rukamori.archivetune.design.components.EmptyState
 import moe.rukamori.archivetune.design.components.ErrorState
 import moe.rukamori.archivetune.design.components.LoadingState
+import moe.rukamori.archivetune.design.components.Scrubber
+import moe.rukamori.archivetune.design.components.formatDuration
+import moe.rukamori.archivetune.extensions.togglePlayPause
 import moe.rukamori.archivetune.viewmodels.LyricsRenderScreenState
 import moe.rukamori.archivetune.viewmodels.LyricsRenderViewModel
 
@@ -67,6 +79,9 @@ private const val INACTIVE_LINE_ALPHA = 0.30f
 
 /** 上下で歌詞を溶かす帯の高さ。 */
 private val FADE_HEIGHT = 72.dp
+
+/** 最後に触ってから操作系が消えるまでの時間。 */
+private const val CONTROLS_VISIBLE_MS = 4_000L
 
 /**
  * 全画面の同期歌詞。
@@ -84,7 +99,9 @@ private val FADE_HEIGHT = 72.dp
  * 同期は行単位。再生位置が進むと「開始時刻が最も新しい行」がアクティブになり、
  * 画面の上から [ACTIVE_LINE_ANCHOR] の位置へ自動で送られる。
  *
- * 行をタップするとその行の先頭へシークする。歌詞側からも再生へ戻せる。
+ * 下端の操作系（シークバー・前後・再生）は歌詞へ被らないよう一定時間で消える。
+ * 画面のどこかを押すと戻る。**行をタップしてシークするのは、その行の文字の上を
+ * 押したときだけ**（行の余白や空いた横幅では飛ばさない）。
  *
  * @param onBack 戻る矢印。
  */
@@ -100,12 +117,28 @@ fun LyricsScreen(
 
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
     val playbackState by playerConnection.playbackState.collectAsState()
+    val isPlaying by playerConnection.isPlaying.collectAsState()
     val renderState by viewModel.state.collectAsState()
 
     val mediaId = mediaMetadata?.id
 
     var position by remember(mediaId) { mutableLongStateOf(playerConnection.player.currentPosition) }
     var pendingSeek by remember(mediaId) { mutableStateOf<Long?>(null) }
+
+    // 下端の操作系の出し入れ。触ってから [CONTROLS_VISIBLE_MS] だけ見せて消す。
+    var controlsVisible by remember(mediaId) { mutableStateOf(true) }
+    var interactionTick by remember(mediaId) { mutableIntStateOf(0) }
+
+    LaunchedEffect(controlsVisible, interactionTick, mediaId) {
+        if (!controlsVisible) return@LaunchedEffect
+        delay(CONTROLS_VISIBLE_MS)
+        controlsVisible = false
+    }
+
+    fun pokeControls() {
+        controlsVisible = true
+        interactionTick++
+    }
 
     // 歌詞の読み込みは曲ごとに1回だけ。duration が後から確定し直しても
     // 再バインドすると取得がやり直されるため、1曲で固定する。
@@ -184,6 +217,19 @@ fun LyricsScreen(
         listState.animateScrollToItem(currentIndex + 1, offset)
     }
 
+    // 操作系のシークバー用。duration が未確定なら 0 のまま（触れない）。
+    val durationMs =
+        mediaMetadata?.duration?.takeIf { it > 0 }?.toLong()?.times(1000L)
+            ?: playerConnection.player.duration.takeIf { it > 0L && it != C.TIME_UNSET }
+            ?: 0L
+    val remainingLabel =
+        if (durationMs > 0L) {
+            val remaining = ((durationMs - position).coerceAtLeast(0L) / 1000L).toInt()
+            "-" + (formatDuration(remaining) ?: "0:00")
+        } else {
+            ""
+        }
+
     Column(
         modifier =
             modifier
@@ -237,6 +283,18 @@ fun LyricsScreen(
                             .fillMaxWidth()
                             .weight(1f),
                 ) {
+                    // 歌詞の上以外を押したときの受け皿。ここが下の層にあるので、
+                    // 行の文字が取ったタップはシークへ、それ以外は操作系を出す方へ流れる。
+                    Box(
+                        modifier =
+                            Modifier
+                                .matchParentSize()
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                ) { pokeControls() },
+                    )
+
                     LazyColumn(
                         state = listState,
                         modifier =
@@ -273,22 +331,33 @@ fun LyricsScreen(
                                 if (line.isInstrumental) "♪" else ""
                             }
                             if (text.isNotEmpty()) {
-                                Text(
-                                    text = text,
-                                    style = type.title1,
-                                    color = color,
-                                    textAlign = TextAlign.Start,
-                                    maxLines = 6,
-                                    overflow = TextOverflow.Ellipsis,
+                                // 横の余白は外側の箱が持ち、タップを受け取るのは文字の箱だけ。
+                                // 行いっぱいに敷くと、文字の無い右側を押してもシークしてしまう。
+                                Box(
                                     modifier =
                                         Modifier
                                             .fillMaxWidth()
-                                            .clickable(
-                                                interactionSource = remember { MutableInteractionSource() },
-                                                indication = null,
-                                            ) { seekTo(line.startMs) }
-                                            .padding(horizontal = 24.dp, vertical = 6.dp),
-                                )
+                                            .padding(horizontal = 24.dp),
+                                ) {
+                                    Text(
+                                        text = text,
+                                        style = type.title1,
+                                        color = color,
+                                        textAlign = TextAlign.Start,
+                                        maxLines = 6,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier =
+                                            Modifier
+                                                .clickable(
+                                                    interactionSource = remember { MutableInteractionSource() },
+                                                    indication = null,
+                                                ) {
+                                                    pokeControls()
+                                                    seekTo(line.startMs)
+                                                }
+                                                .padding(vertical = 6.dp),
+                                    )
+                                }
                             }
 
                             if (!line.translation.isNullOrBlank()) {
@@ -337,6 +406,122 @@ fun LyricsScreen(
                                     ),
                                 ),
                     )
+
+                    // 調節できるもの（シーク・前後・再生）。一定時間で消え、触ると戻る。
+                    AnimatedVisibility(
+                        visible = controlsVisible,
+                        enter = fadeIn(animationSpec = tween(180)),
+                        exit = fadeOut(animationSpec = tween(220)),
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                    ) {
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            colors = listOf(Color.Transparent, backdrop.bottom),
+                                        ),
+                                    )
+                                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                        ) {
+                            Scrubber(
+                                positionMs = position,
+                                durationMs = durationMs,
+                                onSeek = { ms -> seekTo(ms) },
+                                playedColor = Color.White,
+                                trackColor = Color.White.copy(alpha = 0.26f),
+                                showThumb = false,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(18.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = formatDuration((position / 1000L).toInt()) ?: "0:00",
+                                    style = type.caption,
+                                    color = Color.White.copy(alpha = 0.60f),
+                                )
+                                Spacer(Modifier.weight(1f))
+                                Text(
+                                    text = remainingLabel,
+                                    style = type.caption,
+                                    color = Color.White.copy(alpha = 0.60f),
+                                )
+                            }
+
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(72.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement =
+                                    Arrangement.spacedBy(
+                                        space = 24.dp,
+                                        alignment = Alignment.CenterHorizontally,
+                                    ),
+                            ) {
+                                PlayerIconButton(
+                                    onClick = {
+                                        pokeControls()
+                                        playerConnection.seekToPrevious()
+                                    },
+                                    size = 52.dp,
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.skip_previous),
+                                        contentDescription = stringResource(R.string.widget_previous),
+                                        tint = Color.White,
+                                        modifier = Modifier.size(30.dp),
+                                    )
+                                }
+
+                                PlayerIconButton(
+                                    onClick = {
+                                        pokeControls()
+                                        playerConnection.player.togglePlayPause()
+                                    },
+                                    size = 72.dp,
+                                ) {
+                                    Icon(
+                                        painter =
+                                            painterResource(
+                                                if (isPlaying) R.drawable.pause else R.drawable.play,
+                                            ),
+                                        contentDescription =
+                                            if (isPlaying) {
+                                                stringResource(R.string.widget_pause)
+                                            } else {
+                                                stringResource(R.string.play)
+                                            },
+                                        tint = Color.White,
+                                        modifier = Modifier.size(44.dp),
+                                    )
+                                }
+
+                                PlayerIconButton(
+                                    onClick = {
+                                        pokeControls()
+                                        playerConnection.seekToNext()
+                                    },
+                                    size = 52.dp,
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.skip_next),
+                                        contentDescription = stringResource(R.string.next),
+                                        tint = Color.White,
+                                        modifier = Modifier.size(30.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -103,10 +103,10 @@ private val PICKUP_WIDTH_FRACTION = 0.75f
 private val PICKUP_ASPECT = 1f / 1.3f
 
 /** 通常のカルーセルカードの一辺。Apple Music の「最近の再生」と同じ寸法帯。 */
-private val CARD_WIDTH = 160.dp
+private val CARD_WIDTH = 172.dp
 
 /** 円形のアーティストカードの一辺。 */
-private val ARTIST_CARD_WIDTH = 132.dp
+private val ARTIST_CARD_WIDTH = 140.dp
 
 /** セクション見出し右端に出す矢印。 */
 private const val CHEVRON = "›"
@@ -118,8 +118,11 @@ private const val CHEVRON = "›"
  * 4状態（読み込み／成功／空／エラー）の分岐と、成功時の並べ方だけ。
  *
  * 成功時は YouTube Music が返したセクションを**先頭からそのまま**積む。
- * ViewModel が抽出して別の場所に置いている分（特集カードとクイックピック）だけは
- * 元の位置へ戻せないため、特集カードを最上部、クイックピックをその直後へ置く。
+ * ViewModel が抽出して別の場所に置いている分（特集カード・クイックピック・
+ * 最近再生した項目）だけは元の位置へ戻せないため、Apple Music の Listen Now と
+ * 同じ順に置き直す：
+ * **特集カード（最上部） → クイックピック → 最近再生した項目 → 返ってきた順**。
+ *
  * 末尾付近まで来たら続きのページを取りに行き、同じ取得単位は二度送らない。
  *
  * @param navController 曲以外（アルバム・アーティスト等）の遷移に使う。
@@ -310,6 +313,20 @@ fun HomeScreen(
                                 }
                             }
 
+                            // 「最近再生した項目」。Apple Music の Listen Now と同じく、
+                            // 特集カードのすぐ後ろ・おすすめのミックスより前へ置く。
+                            if (uiState.keepListening.isNotEmpty()) {
+                                item(key = "keepListening") {
+                                    LocalItemSection(
+                                        title = stringResource(R.string.recently_played),
+                                        items = uiState.keepListening,
+                                        onOpen = { item ->
+                                            openLocalHomeItem(item, uiState.keepListening, navController, playerConnection)
+                                        },
+                                    )
+                                }
+                            }
+
                             // YouTube Music が返したセクション。名前・順序・中身は
                             // 変えず、重複した分だけ落として並べる。
                             // LazyListScope の中では remember を呼べないので、
@@ -333,18 +350,6 @@ fun HomeScreen(
                                         },
                                         onOpenCard = { card ->
                                             openFeaturedCard(card, navController, playerConnection)
-                                        },
-                                    )
-                                }
-                            }
-
-                            if (uiState.keepListening.isNotEmpty()) {
-                                item(key = "keepListening") {
-                                    LocalItemSection(
-                                        title = stringResource(R.string.listen_again),
-                                        items = uiState.keepListening,
-                                        onOpen = { item ->
-                                            openLocalHomeItem(item, uiState.keepListening, navController, playerConnection)
                                         },
                                     )
                                 }

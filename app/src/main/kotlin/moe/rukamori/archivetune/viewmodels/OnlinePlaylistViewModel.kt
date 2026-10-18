@@ -29,15 +29,18 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import moe.rukamori.archivetune.constants.HideVideoKey
 import moe.rukamori.archivetune.db.MusicDatabase
+import moe.rukamori.archivetune.db.entities.PlaylistEntity
 import moe.rukamori.archivetune.extensions.filterBlockedArtists
 import moe.rukamori.archivetune.innertube.YouTube
 import moe.rukamori.archivetune.innertube.models.PlaylistItem
 import moe.rukamori.archivetune.innertube.models.SongItem
 import moe.rukamori.archivetune.innertube.models.distinctByPlaylistEntry
 import moe.rukamori.archivetune.innertube.models.filterVideo
+import moe.rukamori.archivetune.utils.SyncUtils
 import moe.rukamori.archivetune.utils.dataStore
 import moe.rukamori.archivetune.utils.get
 import moe.rukamori.archivetune.utils.reportException
+import java.time.LocalDateTime
 import javax.inject.Inject
 
 @HiltViewModel
@@ -47,6 +50,7 @@ class OnlinePlaylistViewModel
         @ApplicationContext private val context: Context,
         savedStateHandle: SavedStateHandle,
         private val database: MusicDatabase,
+        private val syncUtils: SyncUtils,
     ) : ViewModel() {
         private val playlistId = savedStateHandle.get<String>("playlistId")!!
 
@@ -120,6 +124,42 @@ class OnlinePlaylistViewModel
 
         fun retry() {
             load(initial = true)
+        }
+
+        /**
+         * 図書館のお気に入りへ入れる / 外す。
+         *
+         * ローカルの `bookmarkedAt` を切り替え、**同じ状態を YouTube Music 側にも
+         * 送る**（送らないと次の同期で戻されてしまう）。行がまだ無いプレイリストは
+         * ここで作ってから曲を取りに行く。作った直後に同期させるのは、図書館から
+         * 開いたときに空の一覧を見せないため。
+         */
+        fun toggleFavorite() {
+            val current = _playlist.value ?: return
+            viewModelScope.launch(Dispatchers.IO) {
+                val existing = database.playlistEntityByBrowseId(playlistId)
+                if (existing != null) {
+                    val updated = existing.localToggleLike()
+                    database.update(updated)
+                    if (!existing.isLocal) {
+                        YouTube.likePlaylist(playlistId, updated.bookmarkedAt != null)
+                    }
+                } else {
+                    val entity =
+                        PlaylistEntity(
+                            name = current.title,
+                            browseId = playlistId,
+                            isEditable = current.isEditable,
+                            bookmarkedAt = LocalDateTime.now(),
+                            thumbnailUrl = current.thumbnail,
+                        )
+                    database.insert(entity)
+                    YouTube.likePlaylist(playlistId, true)
+                    runCatching {
+                        syncUtils.syncPlaylistNow(browseId = playlistId, playlistId = entity.id)
+                    }
+                }
+            }
         }
 
         private fun load(initial: Boolean) {

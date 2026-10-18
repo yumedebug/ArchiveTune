@@ -28,6 +28,7 @@ import moe.rukamori.archivetune.design.components.SongRow
 import moe.rukamori.archivetune.extensions.toMediaItem
 import moe.rukamori.archivetune.innertube.models.WatchEndpoint
 import moe.rukamori.archivetune.models.toMediaMetadata
+import moe.rukamori.archivetune.playback.queues.ListQueue
 import moe.rukamori.archivetune.playback.queues.YouTubeQueue
 import moe.rukamori.archivetune.viewmodels.OnlinePlaylistViewModel
 
@@ -62,6 +63,7 @@ fun OnlinePlaylistScreen(
     val songs by viewModel.playlistSongs.collectAsState()
     val error by viewModel.error.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val dbPlaylist by viewModel.dbPlaylist.collectAsState()
 
     val stateModifier = Modifier.fillMaxSize().windowInsetsPadding(windowInsets)
     val current = playlist
@@ -98,10 +100,41 @@ fun OnlinePlaylistScreen(
                 }
         }
     }
+    // 図書館のお気に入り（ライブラリ）への出し入れ。他人の作ったプレイリストでも
+    // ここから自分の図書館へ入れられる。
+    val isFavorite = dbPlaylist?.playlist?.bookmarkedAt != null
+    menuActions +=
+        DetailMenuAction(
+            stringResource(if (isFavorite) R.string.remove_from_favorites else R.string.favorite),
+        ) {
+            viewModel.toggleFavorite()
+        }
     menuActions +=
         DetailMenuAction(stringResource(R.string.share)) {
             shareText(context, current.shareLink)
         }
+
+    // 一括再生とシャッフル。YouTube 側の再生 endpoint を持たないプレイリスト
+    // （他人の作った公開プレイリストなど）でも押せるよう、曲一覧からキューを組む
+    // 道を用意しておく。曲が1つも無いときだけボタンを出さない。
+    val playAllQueue: () -> Unit = {
+        val endpoint = playEndpoint
+        if (endpoint != null) {
+            conn?.playQueue(YouTubeQueue.playlist(endpoint))
+        } else if (mediaItems.isNotEmpty()) {
+            // endpoint が無い場合は手元の一覧でキューを組む。
+            conn?.playQueue(ListQueue(title = current.title, items = mediaItems))
+        }
+    }
+    val shuffleAllQueue: () -> Unit = {
+        playAllQueue()
+        // playQueue はキュー開始時にシャッフルを一度下げるため、
+        // 起動させたあとに立てて残りを並べ替える。
+        conn?.player?.shuffleModeEnabled = true
+    }
+    val canPlayAll = playEndpoint != null || mediaItems.isNotEmpty()
+    val onPlayAll: (() -> Unit)? = if (canPlayAll) playAllQueue else null
+    val onShuffleAll: (() -> Unit)? = if (canPlayAll) shuffleAllQueue else null
 
     ImmersiveDetailScaffold(
         title = current.title,
@@ -111,19 +144,8 @@ fun OnlinePlaylistScreen(
         subtitle = current.author?.name,
         metadata = current.songCountText,
         description = current.description,
-        onPlay =
-            playEndpoint?.let { endpoint ->
-                { conn?.playQueue(YouTubeQueue.playlist(endpoint)) }
-            },
-        onShuffle =
-            playEndpoint?.let { endpoint ->
-                {
-                    // playQueue はキュー開始時にシャッフルを一度下げるため、
-                    // 起動させたあとに立てて残りを並べ替える。
-                    conn?.playQueue(YouTubeQueue.playlist(endpoint))
-                    conn?.player?.shuffleModeEnabled = true
-                }
-            },
+        onPlay = onPlayAll,
+        onShuffle = onShuffleAll,
         onEnqueue = conn?.let { c -> { c.addToQueue(mediaItems) } },
         menuActions = menuActions,
     ) {

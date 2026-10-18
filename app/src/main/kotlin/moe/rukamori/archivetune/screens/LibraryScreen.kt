@@ -48,6 +48,7 @@ import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.constants.AccountNameKey
 import moe.rukamori.archivetune.constants.LibraryFilter
+import moe.rukamori.archivetune.db.entities.PlaylistEntity
 import moe.rukamori.archivetune.design.appleMetrics
 import moe.rukamori.archivetune.design.applePalette
 import moe.rukamori.archivetune.design.appleType
@@ -56,6 +57,7 @@ import moe.rukamori.archivetune.design.components.AvatarButton
 import moe.rukamori.archivetune.design.components.EmptyState
 import moe.rukamori.archivetune.design.components.LargeTitleHeader
 import moe.rukamori.archivetune.design.components.ListItemRow
+import moe.rukamori.archivetune.design.components.SectionHeader
 import moe.rukamori.archivetune.design.components.SongRow
 import moe.rukamori.archivetune.models.toMediaMetadata
 import moe.rukamori.archivetune.utils.rememberPreference
@@ -137,9 +139,43 @@ fun LibraryScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = metrics.block.dp),
         ) {
-            // 3列のアートグリッド。添付のライブラリと同じく、見出し直下に
-            // 「最近追加した項目」を面として出す。枠線は引かず、隙間だけで区切る。
+            // ── お気に入り ─────────────────────────────────────
+            // 図書館のいちばん最初に置く。開いてすぐ目に入る位置に「いいねした曲」と
+            // 自分のプレイリストを並べ、後ろのカテゴリ一覧と役割を分ける。
+            item(key = "favoritesHeader") {
+                SectionHeader(title = stringResource(R.string.favorite))
+            }
+            item(key = "favorites") {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    LibraryCategoryRow(
+                        icon = R.drawable.favorite,
+                        tint = favoriteRowTints[0],
+                        title = stringResource(R.string.liked_songs),
+                        selected = false,
+                        onClick = {
+                            // いいねした曲は専用のまとめ（歌ページの♡が入る場所）。
+                            navController.navigate(
+                                Routes.localPlaylist(PlaylistEntity.LIKED_PLAYLIST_ID),
+                            )
+                        },
+                    )
+                    LibraryCategoryRow(
+                        icon = R.drawable.queue_music,
+                        tint = favoriteRowTints[1],
+                        title = stringResource(R.string.favorite_playlists),
+                        trailing = playlists.size.takeIf { it > 0 }?.toString(),
+                        selected = active == LibraryFilter.PLAYLISTS,
+                        onClick = { filterState.value = LibraryFilter.PLAYLISTS },
+                    )
+                }
+            }
+
+            // ── 最近追加した項目 ───────────────────────────────
+            // 3列のアートグリッド。枠線は引かず、隙間だけで区切る。
             if (albums.isNotEmpty()) {
+                item(key = "recentHeader") {
+                    SectionHeader(title = stringResource(R.string.recently_added))
+                }
                 item(key = "recentGrid") {
                     RecentlyAddedGrid(
                         albums =
@@ -157,11 +193,34 @@ fun LibraryScreen(
                 }
             }
 
-            // 下線タブの代わりになるカテゴリ行。
+            // ── カテゴリ行（下線タブの代わり） ─────────────────
             item(key = "categories") {
                 LibraryCategoryRows(
                     active = active,
+                    counts =
+                        LibraryCategoryCounts(
+                            artists = artists.size,
+                            albums = albums.size,
+                            playlists = playlists.size,
+                            songs = songs.size,
+                        ),
                     onSelect = { filterState.value = it },
+                )
+            }
+
+            // ── 選んだカテゴリの一覧 ───────────────────────────
+            // いま何の一覧が出ているかを見出しで示す（行を押した直後に迷わない）。
+            item(key = "listHeader") {
+                SectionHeader(
+                    title =
+                        stringResource(
+                            when (active) {
+                                LibraryFilter.ARTISTS -> R.string.artists
+                                LibraryFilter.ALBUMS -> R.string.albums
+                                LibraryFilter.PLAYLISTS -> R.string.playlists
+                                else -> R.string.songs
+                            },
+                        ),
                 )
             }
 
@@ -322,25 +381,49 @@ private val categoryTints =
         Color(0xFFF0872B),
     )
 
+/** お気に入り行の地色。いいねした曲はハートの赤、プレイリストは青。 */
+private val favoriteRowTints =
+    listOf(
+        Color(0xFFE2483F),
+        Color(0xFF3E7BFA),
+    )
+
+/** カテゴリ行の右端に出す件数。 */
+private data class LibraryCategoryCounts(
+    val artists: Int = 0,
+    val albums: Int = 0,
+    val playlists: Int = 0,
+    val songs: Int = 0,
+)
+
+/** カテゴリ行1本ぶんの定義。 */
+private data class LibraryCategoryDef(
+    val labelId: Int,
+    val icon: Int,
+    val filter: LibraryFilter,
+    val count: Int,
+)
+
 /**
  * Playlists / Artists / Albums / Songs の4行。
  *
- * 添付では色付きの四角いアイコン、カテゴリ名、右端のシェブロンで構成され、
+ * 色付きの四角いアイコン、カテゴリ名、右端に件数とシェブロンで構成され、
  * 下線タブは無い。選択中の行だけ名前をアクセントにして現在地を示す。
  */
 @Composable
 private fun LibraryCategoryRows(
     active: LibraryFilter,
+    counts: LibraryCategoryCounts,
     onSelect: (LibraryFilter) -> Unit,
 ) {
     val metrics = appleMetrics()
 
     val rows =
         listOf(
-            Triple(R.string.playlists, R.drawable.queue_music, LibraryFilter.PLAYLISTS),
-            Triple(R.string.artists, R.drawable.person, LibraryFilter.ARTISTS),
-            Triple(R.string.albums, R.drawable.album, LibraryFilter.ALBUMS),
-            Triple(R.string.songs, R.drawable.music_note, LibraryFilter.SONGS),
+            LibraryCategoryDef(R.string.playlists, R.drawable.queue_music, LibraryFilter.PLAYLISTS, counts.playlists),
+            LibraryCategoryDef(R.string.artists, R.drawable.person, LibraryFilter.ARTISTS, counts.artists),
+            LibraryCategoryDef(R.string.albums, R.drawable.album, LibraryFilter.ALBUMS, counts.albums),
+            LibraryCategoryDef(R.string.songs, R.drawable.music_note, LibraryFilter.SONGS, counts.songs),
         )
 
     Column(
@@ -349,13 +432,14 @@ private fun LibraryCategoryRows(
                 .fillMaxWidth()
                 .padding(vertical = metrics.xs.dp),
     ) {
-        rows.forEachIndexed { index, (labelId, icon, filter) ->
+        rows.forEachIndexed { index, row ->
             LibraryCategoryRow(
-                icon = icon,
+                icon = row.icon,
                 tint = categoryTints[index % categoryTints.size],
-                title = stringResource(labelId),
-                selected = filter == active,
-                onClick = { onSelect(filter) },
+                title = stringResource(row.labelId),
+                trailing = row.count.takeIf { it > 0 }?.toString(),
+                selected = row.filter == active,
+                onClick = { onSelect(row.filter) },
             )
         }
     }
@@ -369,6 +453,7 @@ private fun LibraryCategoryRow(
     title: String,
     selected: Boolean,
     onClick: () -> Unit,
+    trailing: String? = null,
 ) {
     val palette = applePalette()
     val type = appleType()
@@ -412,6 +497,16 @@ private fun LibraryCategoryRow(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
+
+        if (!trailing.isNullOrBlank()) {
+            Text(
+                text = trailing,
+                style = type.footnote,
+                color = palette.labelSecondary,
+                maxLines = 1,
+            )
+            Spacer(Modifier.width(metrics.sm.dp))
+        }
 
         Icon(
             painter = painterResource(R.drawable.chevron_right),

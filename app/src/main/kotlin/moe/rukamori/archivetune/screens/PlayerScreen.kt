@@ -15,6 +15,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -102,7 +103,11 @@ private val DISMISS_DRAG = 110.dp
  *    中央の再生だけを大きくする。白い円で囲むと他社のプレイヤーと同じ記号になるため、
  *    Apple Music と同じく輪郭を付けない
  *  - 音量は端末のメディア音量そのもの。つまみは無く、音量キーと常に同じ値を指す
- *  - 最下部は歌詞（左）・出力先（中央）・再生キュー（右）
+ *  - 最下部は歌詞・出力先・再生キュー。左右の端へ散らさず、**3つをひと塊にして中央**へ置く
+ *
+ * 縦の組みは「上へ寄せる」。ジャケットの箱は余りを吸わせず（`fill = false`）、
+ * 余りは搬送の下の余白へまとめて逃がす。こうすると曲名がジャケットのすぐ下へ
+ * 付き、操作系も下から少し浮いた位置に落ち着く。
  *
  * **シャッフルとリピートはここに置かない**（Apple Music と同じく、キュー画面の
  * いちばん上にあるボタン列へ寄せる）。
@@ -287,7 +292,7 @@ fun PlayerScreen(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .height(48.dp)
+                    .height(40.dp)
                     .pointerInput(Unit) {
                         detectVerticalDragGestures(
                             onDragEnd = {
@@ -311,11 +316,14 @@ fun PlayerScreen(
             }
         }
 
-        // ── 巨大なジャケット（画面上半分を占める） ─────────────
+        // ── 巨大なジャケット（曲名のすぐ上まで） ─────────────
+        // `fill = false` にするのが要点。ジャケットの箱が余りを吸わなくなるので、
+        // 下に続く曲名がジャケットのすぐ下へ寄る（箱を埋めると中央寄せになり、
+        // 曲名との間に箱の高さの半分ぶんの隙間が空いてしまう）。
         Box(
             modifier =
                 Modifier
-                    .weight(1f)
+                    .weight(1f, fill = false)
                     .fillMaxWidth(),
             contentAlignment = Alignment.Center,
         ) {
@@ -357,7 +365,7 @@ fun PlayerScreen(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(top = metrics.md.dp),
+                    .padding(top = metrics.sm.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -473,17 +481,17 @@ fun PlayerScreen(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .height(88.dp),
+                    .height(100.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Spacer(Modifier.weight(1f))
 
-            PlayerIconButton(onClick = { playerConnection.seekToPrevious() }, size = 56.dp) {
+            PlayerIconButton(onClick = { playerConnection.seekToPrevious() }, size = 60.dp) {
                 Icon(
                     painter = painterResource(R.drawable.skip_previous),
                     contentDescription = stringResource(R.string.widget_previous),
                     tint = Color.White,
-                    modifier = Modifier.size(32.dp),
+                    modifier = Modifier.size(36.dp),
                 )
             }
 
@@ -496,17 +504,21 @@ fun PlayerScreen(
 
             Spacer(Modifier.weight(1f))
 
-            PlayerIconButton(onClick = { playerConnection.seekToNext() }, size = 56.dp) {
+            PlayerIconButton(onClick = { playerConnection.seekToNext() }, size = 60.dp) {
                 Icon(
                     painter = painterResource(R.drawable.skip_next),
                     contentDescription = stringResource(R.string.next),
                     tint = Color.White,
-                    modifier = Modifier.size(32.dp),
+                    modifier = Modifier.size(36.dp),
                 )
             }
 
             Spacer(Modifier.weight(1f))
         }
+
+        // ここから下（音量・歌詞/出力/キュー）は下端へ寄せる。余りはこの1本に
+        // まとめて吸わせるので、上の塊（ジャケット〜搬送）が画面の上へ寄る。
+        Spacer(Modifier.weight(1f))
 
         // ── 音量（端末のメディア音量） ─────────────────────
         // 書き込み先は端末の音量。画面のスライダーと音量キーが同じ値を指す。
@@ -514,7 +526,7 @@ fun PlayerScreen(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .height(40.dp),
+                    .height(44.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
@@ -524,7 +536,7 @@ fun PlayerScreen(
                     ),
                 contentDescription = null,
                 tint = Color.White.copy(alpha = 0.60f),
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(20.dp),
             )
 
             Scrubber(
@@ -544,57 +556,61 @@ fun PlayerScreen(
                 painter = painterResource(R.drawable.volume_up),
                 contentDescription = stringResource(R.string.volume),
                 tint = Color.White.copy(alpha = 0.60f),
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(20.dp),
             )
         }
 
-        // ── 最下部：歌詞（左）・出力先（中央）・再生キュー（右） ──
+        // ── 最下部：歌詞・出力先・再生キューを中央へ寄せて並べる ──
+        // 左右の端まで散らすと視線が往復するので、3つをひと塊にして中央へ置く。
         Row(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
-                    .padding(bottom = metrics.xs.dp),
+                    .height(64.dp)
+                    .padding(bottom = metrics.sm.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement =
+                Arrangement.spacedBy(
+                    space = metrics.block.dp,
+                    alignment = Alignment.CenterHorizontally,
+                ),
         ) {
-            PlayerIconButton(onClick = onOpenLyrics) {
+            PlayerIconButton(onClick = onOpenLyrics, size = 52.dp) {
                 Icon(
                     painter = painterResource(R.drawable.lyrics),
                     contentDescription = stringResource(R.string.lyrics),
                     tint = Color.White.copy(alpha = 0.85f),
-                    modifier = Modifier.size(22.dp),
+                    modifier = Modifier.size(26.dp),
                 )
             }
 
-            Spacer(Modifier.weight(1f))
-
-            // 出力先は中央。名前が無い（端末内蔵）ときは何も描かない。
+            // 出力先は真ん中。名前が無い（端末内蔵）ときは何も描かない。
             if (deviceName.isNotBlank()) {
-                Icon(
-                    painter = painterResource(R.drawable.cast_output),
-                    contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.55f),
-                    modifier = Modifier.size(15.dp),
-                )
-                Spacer(Modifier.width(metrics.xs.dp))
-                Text(
-                    text = deviceName,
-                    style = type.caption,
-                    color = Color.White.copy(alpha = 0.55f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = 150.dp),
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        painter = painterResource(R.drawable.cast_output),
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.55f),
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(metrics.xs.dp))
+                    Text(
+                        text = deviceName,
+                        style = type.caption,
+                        color = Color.White.copy(alpha = 0.55f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.widthIn(max = 150.dp),
+                    )
+                }
             }
 
-            Spacer(Modifier.weight(1f))
-
-            PlayerIconButton(onClick = onOpenQueue) {
+            PlayerIconButton(onClick = onOpenQueue, size = 52.dp) {
                 Icon(
                     painter = painterResource(R.drawable.queue_music),
                     contentDescription = stringResource(R.string.queue),
                     tint = Color.White,
-                    modifier = Modifier.size(23.dp),
+                    modifier = Modifier.size(28.dp),
                 )
             }
         }
@@ -648,7 +664,7 @@ private fun PlayPauseGlyph(
     Box(
         modifier =
             Modifier
-                .size(76.dp)
+                .size(88.dp)
                 .graphicsLayer { scaleX = scale; scaleY = scale }
                 .clickable(
                     interactionSource = interactionSource,
@@ -665,7 +681,7 @@ private fun PlayPauseGlyph(
                 painter = painterResource(if (playing) R.drawable.pause else R.drawable.play),
                 contentDescription = if (playing) stringResource(R.string.widget_pause) else stringResource(R.string.play),
                 tint = Color.White,
-                modifier = Modifier.size(50.dp),
+                modifier = Modifier.size(58.dp),
             )
         }
     }
@@ -673,7 +689,7 @@ private fun PlayPauseGlyph(
 
 /** 枠を作らないアイコンボタン。タップ領域だけ確保し、面は出さない。 */
 @Composable
-private fun PlayerIconButton(
+internal fun PlayerIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     size: Dp = 44.dp,

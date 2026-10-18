@@ -760,9 +760,6 @@ val LyricsV2LrcBounceEnabledKey = booleanPreferencesKey("lyricsV2LrcBounceEnable
 
 val PlayerVolumeKey = floatPreferencesKey("playerVolume")
 val RepeatModeKey = intPreferencesKey("repeatMode")
-val SponsorBlockEnabledKey = booleanPreferencesKey("sponsorBlockEnabled")
-val SponsorBlockCategoriesKey = stringSetPreferencesKey("sponsorBlockCategories")
-val SponsorBlockApiUrlKey = stringPreferencesKey("sponsorBlockApiUrl")
 
 val SearchSourceKey = stringPreferencesKey("searchSource")
 val SwipeThumbnailKey = booleanPreferencesKey("swipeThumbnail")
