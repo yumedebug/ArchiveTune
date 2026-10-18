@@ -14,6 +14,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -254,6 +255,9 @@ fun SectionHeader(
                 style = type.subhead.copy(fontWeight = FontWeight.SemiBold),
                 color = palette.accent,
                 maxLines = 1,
+                // 見出しの右端の操作はタップで効かせる。ここが効かないと
+                // 「すべて表示」が見えているのに何も起きない見え方になる。
+                modifier = Modifier.clickable(onClick = onAction),
             )
         }
     }

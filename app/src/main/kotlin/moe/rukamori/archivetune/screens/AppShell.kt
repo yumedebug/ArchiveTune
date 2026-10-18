@@ -229,10 +229,7 @@ fun AppShell(
                     LyricsScreen(onBack = { navController.popBackStack() })
                 }
                 composable(Routes.Queue) {
-                    QueueScreen(
-                        onBack = { navController.popBackStack() },
-                        onOpenLyrics = { navController.navigate(Routes.Lyrics) },
-                    )
+                    QueueScreen(onBack = { navController.popBackStack() })
                 }
                 composable(Routes.Settings) {
                     SettingsScreen(
@@ -246,7 +243,12 @@ fun AppShell(
                 }
 
                 composable(Routes.OnlineSearch) {
-                    OnlineSearchResultsScreen(onBack = { navController.popBackStack() })
+                    OnlineSearchResultsScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenAlbum = { navController.navigate(Routes.album(it)) },
+                        onOpenArtist = { navController.navigate(Routes.artist(it)) },
+                        onOpenPlaylist = { navController.navigate(Routes.onlinePlaylist(it)) },
+                    )
                 }
 
                 composable(Routes.Album) {
@@ -319,10 +321,15 @@ fun AppShell(
                                 ?.savedStateHandle
                                 ?.set(ScrollToTopKey, true)
                         } else {
+                            // タブの上に積んだ詳細画面（プレイヤー・アーティスト・設定）は
+                            // **持ち越さない**。持ち越すと、アーティスト画面からホームを押した
+                            // ときに、保存されていた詳細画面の並びが復元されてホームへ戻れなくなる。
+                            // 保存と復元は「タブからタブへ移るとき」だけ行う。
+                            val fromTab = currentRoute in Routes.MainTabs
                             navController.navigate(tab.route) {
-                                popUpTo(Routes.Home) { saveState = true }
+                                popUpTo(Routes.Home) { saveState = fromTab }
                                 launchSingleTop = true
-                                restoreState = true
+                                restoreState = fromTab
                             }
                         }
                     },

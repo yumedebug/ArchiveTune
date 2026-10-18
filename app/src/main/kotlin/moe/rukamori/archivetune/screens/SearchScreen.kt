@@ -81,6 +81,8 @@ import moe.rukamori.archivetune.viewmodels.LocalSearchViewModel
 import moe.rukamori.archivetune.viewmodels.OnlineSearchSuggestionViewModel
 import moe.rukamori.archivetune.viewmodels.SearchDiscoveryScreenState
 import moe.rukamori.archivetune.viewmodels.SearchDiscoveryViewModel
+import moe.rukamori.archivetune.viewmodels.SearchSongsState
+import moe.rukamori.archivetune.viewmodels.SearchSongsViewModel
 import moe.rukamori.archivetune.db.entities.Artist as LocalArtist
 import moe.rukamori.archivetune.db.entities.Album as LocalAlbum
 import moe.rukamori.archivetune.db.entities.Playlist as LocalPlaylist
@@ -104,6 +106,7 @@ fun SearchScreen(
     val localSearchViewModel: LocalSearchViewModel = hiltViewModel()
     val discoveryViewModel: SearchDiscoveryViewModel = hiltViewModel()
     val suggestionViewModel: OnlineSearchSuggestionViewModel = hiltViewModel()
+    val songsViewModel: SearchSongsViewModel = hiltViewModel()
 
     val windowInsets = LocalPlayerAwareWindowInsets.current
     val playerConnection = LocalPlayerConnection.current
@@ -115,9 +118,14 @@ fun SearchScreen(
     val localResult by localSearchViewModel.result.collectAsState()
     val discoveryState by discoveryViewModel.state.collectAsState()
     val suggestionState by suggestionViewModel.viewState.collectAsState()
+    // オンラインの曲は Compose の状態として持つ ViewModel から直接読む。
+    val songsState = songsViewModel.state
 
-    // 入力に合わせて候補を取りに行く。クエリが変わったときだけ ViewModel へ渡す。
-    LaunchedEffect(query) { suggestionViewModel.updateQuery(query) }
+    // 入力に合わせて候補とオンラインの曲を取りに行く。クエリが変わったときだけ渡す。
+    LaunchedEffect(query) {
+        suggestionViewModel.updateQuery(query)
+        songsViewModel.updateQuery(query)
+    }
 
     fun submitSearch(value: String = query) {
         val trimmed = value.trim()
@@ -178,22 +186,74 @@ fun SearchScreen(
                         )
                     }
                 } else {
-                    // 検索候補。履歴と候補文字列を重複なく上から並べる。
-                    // LazyListScope の中なので remember は使わず、通しごとに組み立てる。
-                    val suggestions =
-                        (suggestionState.history.map { it.query } + suggestionState.suggestions)
-                            .distinct()
-                            .filter { it.isNotBlank() }
-                    if (suggestions.isNotEmpty()) {
-                        items(
-                            items = suggestions,
-                            key = { "suggestion:$it" },
-                        ) { suggestion ->
-                            SuggestionRow(
-                                text = suggestion,
-                                onClick = { submitSearch(suggestion) },
-                            )
+                    // 入力があるときは、まず YouTube Music 側の曲を引く。
+                    // 「YouTube にある曲が検索に出てこない」を無くすための本線で、
+                    // 端末内（ライブラリ）の結果はその下へ足す。
+                    val onlineSongs = (songsState as? SearchSongsState.Success)?.songs.orEmpty()
+
+                    when (songsState) {
+                        is SearchSongsState.Success -> {
+                            if (onlineSongs.isNotEmpty()) {
+                                item(key = "onlineHead") {
+                                    SectionHeader(
+                                        title = stringResource(R.string.top_results),
+                                        // 絞り込み（アルバム・アーティスト・動画…）は
+                                        // これまでどおり結果画面に任せる。
+                                        actionLabel = stringResource(R.string.see_all),
+                                        onAction = { submitSearch(query) },
+                                    )
+                                }
+                                items(items = onlineSongs, key = { "online:${it.id}" }) { song ->
+                                    SongRow(
+                                        song = song.toMediaMetadata(),
+                                        onClick = { playerConnection?.playYtSong(song) },
+                                    )
+                                }
+                            }
                         }
+
+                        is SearchSongsState.Loading -> {
+                            // 曲が返るまでのつなぎとして候補（履歴＋サジェスト）を出す。
+                            // 曲が返ったら入れ替えるので、並びを押し下げない。
+                            val suggestions =
+                                (suggestionState.history.map { it.query } + suggestionState.suggestions)
+                                    .distinct()
+                                    .filter { it.isNotBlank() }
+                            if (suggestions.isEmpty()) {
+                                item(key = "onlineLoading") {
+                                    LoadingState(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .padding(top = metrics.sm.dp),
+                                    )
+                                }
+                            } else {
+                                items(items = suggestions, key = { "suggestion:$it" }) { suggestion ->
+                                    SuggestionRow(
+                                        text = suggestion,
+                                        onClick = { submitSearch(suggestion) },
+                                    )
+                                }
+                            }
+                        }
+
+                        is SearchSongsState.Error -> {
+                            val messageResId = songsState.messageResId
+                            item(key = "onlineError") {
+                                ErrorState(
+                                    title = stringResource(R.string.search),
+                                    message = stringResource(messageResId),
+                                    onRetry = { songsViewModel.updateQuery(query) },
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .padding(top = metrics.sm.dp),
+                                )
+                            }
+                        }
+
+                        SearchSongsState.Idle -> Unit
                     }
 
                     val orderedKeys =
@@ -207,7 +267,15 @@ fun SearchScreen(
                     // 絞り込み未指定時は ALL に全件が入る。そこにだけ見出しつけ、
                     // 後続はフィルタ別に見出しを付ける。
                     val allItems = localResult.map[LocalFilter.ALL].orEmpty()
+                    val hasOnline = onlineSongs.isNotEmpty()
+
                     if (allItems.isNotEmpty()) {
+                        // オンラインの曲と混ざって見えないよう、見出しで分ける。
+                        if (hasOnline) {
+                            item(key = "localHead") {
+                                SectionHeader(title = stringResource(R.string.filter_library))
+                            }
+                        }
                         items(items = allItems, key = { "all:${it.id}" }) { item ->
                             LocalItemRow(
                                 item = item,
@@ -239,7 +307,9 @@ fun SearchScreen(
                         }
                     }
 
-                    if (allItems.isEmpty() && orderedKeys.all { localResult.map[it].isNullOrEmpty() }) {
+                    // どこにも何も無いときだけ空状態を出す。取得中はまだ分からないので出さない。
+                    val localEmpty = allItems.isEmpty() && orderedKeys.all { localResult.map[it].isNullOrEmpty() }
+                    if (localEmpty && !hasOnline && songsState !is SearchSongsState.Loading) {
                         item(key = "empty") {
                             EmptyState(
                                 title = stringResource(R.string.search),

@@ -62,10 +62,16 @@ import moe.rukamori.archivetune.viewmodels.OnlineSearchViewModel
  * 「さらに読み込む」は一覧の末尾に到達したときだけ ViewModelへ通知する。
  *
  * @param onBack 戻る矢印。
+ * @param onOpenAlbum アルバムの行を押したときの行き先。
+ * @param onOpenArtist アーティストの行を押したときの行き先。
+ * @param onOpenPlaylist プレイリストの行を押したときの行き先。
  */
 @Composable
 fun OnlineSearchResultsScreen(
     onBack: () -> Unit,
+    onOpenAlbum: (String) -> Unit,
+    onOpenArtist: (String) -> Unit,
+    onOpenPlaylist: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val viewModel: OnlineSearchViewModel = hiltViewModel()
@@ -175,7 +181,7 @@ fun OnlineSearchResultsScreen(
                         ListItemRow(
                             title = item.title,
                             thumbnailUrl = item.thumbnail,
-                            onClick = { Unit },
+                            onClick = { onOpenAlbum(item.id) },
                         )
 
                     is ArtistItem ->
@@ -183,7 +189,7 @@ fun OnlineSearchResultsScreen(
                             title = item.title,
                             thumbnailUrl = item.thumbnail,
                             circularArtwork = true,
-                            onClick = { Unit },
+                            onClick = { onOpenArtist(item.id) },
                         )
 
                     is PlaylistItem ->
@@ -191,7 +197,7 @@ fun OnlineSearchResultsScreen(
                             title = item.title,
                             subtitle = item.author?.name,
                             thumbnailUrl = item.thumbnail,
-                            onClick = { Unit },
+                            onClick = { onOpenPlaylist(item.id) },
                         )
 
                     else -> Unit

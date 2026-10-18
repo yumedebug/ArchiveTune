@@ -11,6 +11,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -31,6 +32,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
@@ -65,7 +67,6 @@ import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.constants.AutoLoadMoreKey
-import moe.rukamori.archivetune.constants.CrossfadeEnabledKey
 import moe.rukamori.archivetune.design.appleMetrics
 import moe.rukamori.archivetune.design.applePalette
 import moe.rukamori.archivetune.design.appleType
@@ -112,13 +113,13 @@ private val PROGRESS_HEIGHT = 2.dp
  * 組み方は Apple Music のキューに寄せている。
  *
  *  - 上端は取っ手と Now Playing の縮小版 [CurrentTrackHeader]、その下に細い進行線
+ *  - そのすぐ下が**モードの行**。Apple Music (iOS 18) と同じく画面の**上**に
+ *    「シャッフル／リピート／自動再生」を等幅で並べ、入っているものだけ
+ *    アクセントの面で塗る（下の一覧の操作を邪魔しない位置に置く）
  *  - 本文は「History」→「Playing Next」→ 予定の曲。**予定の曲は
  *    ジャケット＋曲名＋アーティストだけ**の行にし、再生時間や「…」は置かない
- *  - いちばん下は**無地のアイコンだけ**のモード行（シャッフル／リピート／
- *    リピート1曲／自動再生／クロスフェード）。白い面で塗るピル型のトグルは
- *    他社のプレイヤーの記号なので使わない
- *  - **搬送（再生・送り）はここに置かない**。Apple Music 同様、それは
- *    Now Playing の役割で、この画面は並びを見る画面に絞る
+ *  - **搬送（再生・送り）も、下のモード行もここに置かない**。Apple Music 同様、
+ *    搬送は Now Playing の役割で、この画面は並びを見る画面に絞る
  *
  * 背景は全画面プレイヤーと同じく [rememberArtworkBackdrop] から取るので、
  * 画面を切り替えても色は飛ばない。
@@ -127,12 +128,10 @@ private val PROGRESS_HEIGHT = 2.dp
  * 再生中の行だけスワイプ対象から外し、再生が途切れないようにしている。
  *
  * @param onBack 戻る矢印。プレイヤーなど上位の画面へ戻す。
- * @param onOpenLyrics 歌詞ボタン。
  */
 @Composable
 fun QueueScreen(
     onBack: () -> Unit,
-    onOpenLyrics: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val playerConnection = LocalPlayerConnection.current ?: return
@@ -148,10 +147,9 @@ fun QueueScreen(
     val shuffleEnabled by playerConnection.shuffleModeEnabled.collectAsState()
     val repeatMode by playerConnection.repeatMode.collectAsState()
 
-    // モード行の裏側。どちらも MusicService が DataStore から読んで効かせるので、
-    // 画面側は書き込むだけにする。
+    // モード行の裏側。自動再生は MusicService が DataStore から読んで効かせるので、
+    // 画面側は書き込むだけにする。クロスフェードは設定画面へ移した。
     var autoLoadMore by rememberPreference(AutoLoadMoreKey, true)
-    var crossfade by rememberPreference(CrossfadeEnabledKey, false)
 
     // 背景の色。キュー・歌詞・全画面プレイヤーの3つが同じキーで取りに行くので、
     // 切り替えても同じ値になり、色が飛ばない。
@@ -299,6 +297,59 @@ fun QueueScreen(
                 )
             }
 
+            // ── モード（シャッフル／リピート／自動再生） ─────────
+            // Apple Music (iOS 18) のキューと同じく、画面の**上**に等幅で並べる。
+            // 入っているものだけアクセントの面で塗り、状態が一目で分かるようにする。
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start = metrics.gutter.dp,
+                            end = metrics.gutter.dp,
+                            top = metrics.sm.dp,
+                            bottom = metrics.xs.dp,
+                        ),
+                horizontalArrangement = Arrangement.spacedBy(metrics.sm.dp),
+            ) {
+                QueueToggleButton(
+                    icon = if (shuffleEnabled) R.drawable.shuffle_on else R.drawable.shuffle,
+                    label = stringResource(R.string.shuffle),
+                    selected = shuffleEnabled,
+                    onClick = { playerConnection.player.shuffleModeEnabled = !shuffleEnabled },
+                    modifier = Modifier.weight(1f),
+                )
+
+                QueueToggleButton(
+                    icon =
+                        when (repeatMode) {
+                            Player.REPEAT_MODE_ONE -> R.drawable.repeat_one_on
+                            Player.REPEAT_MODE_ALL -> R.drawable.repeat_on
+                            else -> R.drawable.repeat
+                        },
+                    label = stringResource(R.string.queue_repeat),
+                    selected = repeatMode != Player.REPEAT_MODE_OFF,
+                    onClick = {
+                        // 押すたびに オフ → 全曲 → 1曲 → オフ と回す（Apple Music と同じ順）。
+                        playerConnection.player.repeatMode =
+                            when (repeatMode) {
+                                Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                                Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                                else -> Player.REPEAT_MODE_OFF
+                            }
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+
+                QueueToggleButton(
+                    icon = R.drawable.infinity,
+                    label = stringResource(R.string.autoplay),
+                    selected = autoLoadMore,
+                    onClick = { autoLoadMore = !autoLoadMore },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
             if (queueWindows.isEmpty()) {
                 EmptyState(
                     title = stringResource(R.string.queue),
@@ -356,11 +407,13 @@ fun QueueScreen(
                                 SwipeToDismissBox(
                                     state = dismissState,
                                     enableDismissFromStartToEnd = false,
-                                    // 削除面は**スワイプした分だけ**出す。行そのものは
+                                    // 削除面は**掴んでしきい値を越えたときだけ**出す。行そのものは
                                     // 地色を持たない（背後のジャケットを見せている）ため、
                                     // 常時描くと赤い帯が全行に見えてしまう。
                                     backgroundContent = {
-                                        QueueDeleteBackground(progress = dismissState.progress)
+                                        if (dismissState.targetValue != SwipeToDismissBoxValue.Settled) {
+                                            QueueDeleteBackground()
+                                        }
                                     },
                                     onDismiss = {
                                         if (!removeQueueWindow(playerConnection.player, window)) {
@@ -391,71 +444,6 @@ fun QueueScreen(
                         }
                     }
                 }
-            }
-
-            // ── モード行 ─────────────────────────────────────
-            // 歌詞（左）と、無地のアイコンだけのモード切替（右）。
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(
-                            start = metrics.gutter.dp,
-                            end = metrics.gutter.dp,
-                            top = metrics.xs.dp,
-                            bottom = metrics.sm.dp,
-                        ),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                QueueModeButton(
-                    icon = R.drawable.lyrics,
-                    selected = false,
-                    onClick = onOpenLyrics,
-                    contentDescription = stringResource(R.string.lyrics),
-                )
-
-                Spacer(Modifier.weight(1f))
-
-                QueueModeButton(
-                    icon = if (shuffleEnabled) R.drawable.shuffle_on else R.drawable.shuffle,
-                    selected = shuffleEnabled,
-                    onClick = { playerConnection.player.shuffleModeEnabled = !shuffleEnabled },
-                    contentDescription = stringResource(R.string.shuffle),
-                )
-
-                QueueModeButton(
-                    icon = if (repeatMode == Player.REPEAT_MODE_ALL) R.drawable.repeat_on else R.drawable.repeat,
-                    selected = repeatMode == Player.REPEAT_MODE_ALL,
-                    onClick = {
-                        playerConnection.player.repeatMode =
-                            if (repeatMode == Player.REPEAT_MODE_ALL) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ALL
-                    },
-                    contentDescription = stringResource(R.string.repeat_mode_all),
-                )
-
-                QueueModeButton(
-                    icon = if (repeatMode == Player.REPEAT_MODE_ONE) R.drawable.repeat_one_on else R.drawable.repeat_one,
-                    selected = repeatMode == Player.REPEAT_MODE_ONE,
-                    onClick = {
-                        playerConnection.player.repeatMode =
-                            if (repeatMode == Player.REPEAT_MODE_ONE) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ONE
-                    },
-                    contentDescription = stringResource(R.string.repeat_mode_one),
-                )
-
-                QueueModeButton(
-                    icon = R.drawable.infinity,
-                    selected = autoLoadMore,
-                    onClick = { autoLoadMore = !autoLoadMore },
-                    contentDescription = stringResource(R.string.autoplay),
-                )
-
-                QueueModeButton(
-                    icon = R.drawable.sync,
-                    selected = crossfade,
-                    onClick = { crossfade = !crossfade },
-                    contentDescription = stringResource(R.string.crossfade),
-                )
             }
         }
     }
@@ -578,37 +566,55 @@ private fun ContinueHeader(
 }
 
 /**
- * モード行の1ボタン。
+ * モード行（シャッフル／リピート／自動再生）の1ボタン。
  *
- * **面を持たせない。** ピル型に塗ると他社のプレイヤーの記号になり、行が
- * にぎやかになって曲の並びが読めなくなる。Apple Music のキューと同じく
- * 記号だけを置き、入っているものだけアクセント色にする。
+ * Apple Music (iOS 18) のキューの上端にあるボタンと同じく、**アイコンと文字を
+ * 横に並べた丸いカプセル**にする。入っているものはアクセントの面で塗り、
+ * 入っていないものは中立の面に落とす（押した結果がその場で見える）。
+ *
+ * @param icon 表示する記号。
+ * @param label 記号の隣に出す文字。読み上げの説明も兼ねる。
+ * @param selected いま有効か。
  */
 @Composable
-private fun QueueModeButton(
+private fun QueueToggleButton(
     icon: Int,
+    label: String,
     selected: Boolean,
     onClick: () -> Unit,
-    contentDescription: String?,
+    modifier: Modifier = Modifier,
 ) {
     val palette = applePalette()
+    val type = appleType()
+    val metrics = appleMetrics()
 
-    Box(
+    Row(
         modifier =
-            Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(10.dp))
+            modifier
+                .height(40.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(if (selected) palette.accent else palette.fill)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                ) { onClick() },
-        contentAlignment = Alignment.Center,
+                ) { onClick() }
+                .padding(horizontal = metrics.sm.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
     ) {
         Icon(
             painter = painterResource(icon),
-            contentDescription = contentDescription,
-            tint = if (selected) palette.accent else palette.onBackground.copy(alpha = 0.75f),
-            modifier = Modifier.size(21.dp),
+            contentDescription = label,
+            tint = if (selected) Color.White else palette.onFill,
+            modifier = Modifier.size(17.dp),
+        )
+        Spacer(Modifier.width(metrics.xs.dp))
+        Text(
+            text = label,
+            style = type.footnote,
+            color = if (selected) Color.White else palette.onFill,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -723,12 +729,11 @@ private fun QueueDragHandle(modifier: Modifier = Modifier) {
  * 行をスライドさせた方向の裏に赤い面と「削除」を置く。
  * 色は [moe.rukamori.archivetune.design.ApplePalette.error]、文字は面の上なので白で固定。
  *
- * [progress] はスワイプ量（0〜1）。行そのものは地色を持たず背後のジャケットを
- * 透かしているので、常時描くと赤い帯が全行に見えてしまう。必ずスワイプ量で
- * 不透明度を落として、掴んでいる行だけに出す。
+ * 呼び出し側が**掴んでしきい値を越えたときだけ**描く。行そのものは地色を持たず
+ * 背後のジャケットを透かしているので、常時描くと赤い帯が全行に見えてしまう。
  */
 @Composable
-private fun RowScope.QueueDeleteBackground(progress: Float) {
+private fun RowScope.QueueDeleteBackground() {
     val palette = applePalette()
     val type = appleType()
     val metrics = appleMetrics()
@@ -737,7 +742,6 @@ private fun RowScope.QueueDeleteBackground(progress: Float) {
         modifier =
             Modifier
                 .fillMaxSize()
-                .graphicsLayer { alpha = progress.coerceIn(0f, 1f) }
                 .background(palette.error),
         contentAlignment = Alignment.CenterEnd,
     ) {

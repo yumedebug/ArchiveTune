@@ -139,6 +139,7 @@
     <string name="cast_available_device_count">Devices found: %1$d</string>
     <string name="cast_route_picker_unavailable">Cast is unavailable right now.</string>
     <string name="shuffle">Shuffle</string>
+    <string name="queue_repeat">Repeat</string>
     <string name="music_recognition">Music Recognition</string>
     <string name="reset">Reset</string>
     <string name="details">Details</string>

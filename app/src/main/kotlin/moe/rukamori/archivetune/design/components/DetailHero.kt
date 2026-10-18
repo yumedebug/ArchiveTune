@@ -145,9 +145,9 @@ private fun HeroActions(
     onPlay: (() -> Unit)?,
     onShuffle: (() -> Unit)?,
 ) {
+    val palette = applePalette()
     val type = appleType()
     val metrics = appleMetrics()
-    val translucent = Color.White.copy(alpha = 0.14f)
 
     Row(
         modifier =
@@ -166,7 +166,7 @@ private fun HeroActions(
                 modifier =
                     Modifier
                         .clip(RoundedCornerShape(999.dp))
-                        .background(translucent)
+                        .background(palette.fill)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
@@ -177,14 +177,14 @@ private fun HeroActions(
                 Icon(
                     painter = painterResource(R.drawable.shuffle),
                     contentDescription = stringResource(R.string.shuffle),
-                    tint = Color.White,
+                    tint = palette.onFill,
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
                     text = stringResource(R.string.shuffle),
                     style = type.subhead.copy(fontWeight = FontWeight.SemiBold),
-                    color = Color.White,
+                    color = palette.onFill,
                 )
             }
         }
@@ -196,7 +196,9 @@ private fun HeroActions(
                         .weight(1f)
                         .height(52.dp)
                         .clip(RoundedCornerShape(999.dp))
-                        .background(Color.White)
+                        // 地色と文字色を反転させる。暗いテーマでは白地に黒、
+                        // 明るいテーマでは黒地に白になり、どちらでも浮いて見える。
+                        .background(palette.onBackground)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
@@ -208,14 +210,14 @@ private fun HeroActions(
                 Icon(
                     painter = painterResource(R.drawable.play),
                     contentDescription = null,
-                    tint = Color.Black,
+                    tint = palette.background,
                     modifier = Modifier.size(20.dp),
                 )
                 Spacer(Modifier.width(metrics.sm.dp))
                 Text(
                     text = stringResource(R.string.play),
                     style = type.headline,
-                    color = Color.Black,
+                    color = palette.background,
                 )
             }
         }

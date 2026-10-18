@@ -79,6 +79,7 @@ import moe.rukamori.archivetune.domain.player.ImmersivePlayerScreenState
 import moe.rukamori.archivetune.domain.player.ImmersivePlayerUiModel
 import moe.rukamori.archivetune.extensions.toMediaItem
 import moe.rukamori.archivetune.extensions.togglePlayPause
+import moe.rukamori.archivetune.utils.rememberDeviceVolume
 import moe.rukamori.archivetune.viewmodels.ImmersivePlayerViewModel
 
 /** 下へこの距離だけ引くとプレイヤーを閉じる。 */
@@ -90,18 +91,21 @@ private val DISMISS_DRAG = 110.dp
  * 背面はジャケットから抜いた2色のグラデーション。ジャケットが変わると
  * [animateColorAsState] で色が溶けて入れ替わる。
  *
- * 組み方は Apple Music の Now Playing に合わせている。
+ * 組み方は Apple Music (iPhone) の Now Playing に合わせている。
  *
- *  - 上端は取っ手（下へ引くと閉じる）
+ *  - 上端は下向きの山形（下へ引いても閉じる）
  *  - 巨大なジャケット。曲が変わるときは前後をクロスフェードさせる
- *  - 曲名・アーティストは左寄せ、右に★と「…」
- *  - 進行バーは白。両端に時間
- *  - 搬送は**面を持たない無地のグリフ3つ**（前・再生・次）。中央の再生だけを大きくする。
- *    白い円で囲むと他社のプレイヤーと同じ記号になるため、Apple Music と同じく輪郭を付けない
- *  - 最下部に出力先（左）と歌詞・再生キュー（右）
+ *  - 曲名と「アーティスト — アルバム」は左寄せ、右に★と「…」
+ *  - 進行バーは白の丸帯。**つまみは置かない**（Apple Music と同じ）
+ *  - その下に経過（左）と残り（右、頭に「-」）
+ *  - 搬送は**面を持たない無地のグリフ3つ**（前・再生・次）。前後は左右へ広く離し、
+ *    中央の再生だけを大きくする。白い円で囲むと他社のプレイヤーと同じ記号になるため、
+ *    Apple Music と同じく輪郭を付けない
+ *  - 音量は端末のメディア音量そのもの。つまみは無く、音量キーと常に同じ値を指す
+ *  - 最下部は歌詞（左）・出力先（中央）・再生キュー（右）
  *
  * **シャッフルとリピートはここに置かない**（Apple Music と同じく、キュー画面の
- * いちばん下にある無地アイコンの列へ寄せる）。
+ * いちばん上にあるボタン列へ寄せる）。
  *
  * 状態の読み取りは [ImmersivePlayerViewModel] に寄せている。★（お気に入り）と
  * 出力先デバイスはこの ViewModel がしか持たないため。シークと音量の**命令**は
@@ -213,14 +217,25 @@ fun PlayerScreen(
     // 表示位置は、シーク先をまだプレイヤーが迎えていないときはその位置を保持する。
     val displayedPosition = pendingSeek ?: model?.positionMs ?: 0L
     val duration = model?.durationMs ?: 0L
-    val volume = model?.volume ?: 0f
+
+    // 音量は端末のメディア音量そのもの。ここで繋ぐことで、音量キーや他アプリで
+    // 変えた値とも食い違わない（エンジンの volume は触らない）。
+    val deviceVolume = rememberDeviceVolume()
 
     val title = model?.title.orEmpty()
     val artistNames = model?.artists.orEmpty().joinToString(", ") { it.name }
+    // 曲名の下の副題は「アーティスト — アルバム」。片方しか無ければ在る方だけを出す。
+    val albumTitle = currentSong?.album?.title.orEmpty()
+    val subtitle =
+        listOf(artistNames, albumTitle)
+            .filter { it.isNotBlank() }
+            .joinToString(" — ")
     // 名前の下をタップしたときの行き先。ID を持つアーティストが先頭のものを選ぶ
     // （Apple Music と同じく、曲の並びの代表＝先頭のアーティストへ進む）。
     val artistId = model?.artists?.firstOrNull { !it.id.isNullOrBlank() }?.id
-    val deviceName = model?.outputDevice?.name.orEmpty().ifBlank { model?.sourceTitle.orEmpty() }
+    // 出力先は最下部の中央に出す。端末内蔵のスピーカーでは名前が空なので、
+    // そのときは何も描かない（空の欄を残さない）。
+    val deviceName = model?.outputDevice?.name.orEmpty()
 
     Column(
         modifier =
@@ -335,7 +350,9 @@ fun PlayerScreen(
             }
         }
 
-        // ── 曲名・アーティスト（左寄せ、右に★と「…」） ──────────
+        // ── 曲名・副題（左寄せ、右に★と「…」） ──────────────
+        // 曲名と副題の2行、その右に★と「…」を縦に並べず**同じ行の右端**へ置く。
+        // Apple Music の Now Playing と同じ配置。
         Row(
             modifier =
                 Modifier
@@ -348,17 +365,17 @@ fun PlayerScreen(
                     text = title,
                     style = type.title2,
                     color = Color.White,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (artistNames.isNotEmpty()) {
+                if (subtitle.isNotEmpty()) {
                     // タップでアーティスト画面へ。ID が取れない曲（ローカル等）では
                     // 触れないただの文字のままにして、死んだリンクを作らない。
                     val onArtistClick =
                         artistId?.let { id -> { onOpenArtist(id) } }
                     Text(
-                        text = artistNames,
-                        style = type.title3,
+                        text = subtitle,
+                        style = type.callout,
                         color = Color.White.copy(alpha = 0.66f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -381,6 +398,8 @@ fun PlayerScreen(
                 }
             }
 
+            Spacer(Modifier.width(metrics.sm.dp))
+
             FavoriteButton(
                 isFavorite = model?.isLiked == true,
                 onClick = { viewModel.onAction(ImmersivePlayerAction.ToggleLike) },
@@ -398,23 +417,9 @@ fun PlayerScreen(
             }
         }
 
-        // ── 書式（対応していれば表示。無いときは行自体を描かない） ──
-        if (model?.formatDetails.isNullOrBlank().not()) {
-            Text(
-                text = model?.formatDetails.orEmpty(),
-                style = type.footnote,
-                color = Color.White.copy(alpha = 0.55f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(top = metrics.xs.dp),
-            )
-        }
-
-        // ── スクラブバーと時間 ──────────────────────────────
+        // ── 進行バー ───────────────────────────────────────
         // 画面の主役はジャケットの色なので、進行バーは白にして主張を消す。
+        // つまみは置かない（Apple Music と同じく、触っている間だけ帯が太くなる）。
         Scrubber(
             positionMs = displayedPosition,
             durationMs = duration,
@@ -424,11 +429,22 @@ fun PlayerScreen(
                 if (!dragging) pendingSeek = null
             },
             playedColor = Color.White,
+            trackColor = Color.White.copy(alpha = 0.26f),
+            showThumb = false,
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(top = metrics.sm.dp),
+                    .padding(top = metrics.md.dp),
         )
+
+        // 左に経過、右に残り（頭に「-」）。残り時間は減っていく向きで出す。
+        val remainingLabel =
+            if (duration > 0L) {
+                val remaining = ((duration - displayedPosition).coerceAtLeast(0L) / 1000L).toInt()
+                "-" + (formatDuration(remaining) ?: "0:00")
+            } else {
+                ""
+            }
 
         Row(
             modifier =
@@ -444,115 +460,103 @@ fun PlayerScreen(
             )
             Spacer(Modifier.weight(1f))
             Text(
-                text = formatDuration((duration / 1000L).toInt()) ?: "0:00",
+                text = remainingLabel,
                 style = type.caption,
                 color = Color.White.copy(alpha = 0.60f),
             )
         }
 
         // ── 搬送3点 ───────────────────────────────────────
-        // Apple Music 同様、面を持たない無地のグリフだけを置く。中央の再生・
-        // 一時停止だけを大きくし、前後は控えめにする。
+        // Apple Music 同様、面を持たない無地のグリフだけを置く。前後は広く離し、
+        // 中央の再生・一時停止だけを大きくする（押し間違いも減る）。
         Row(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .height(96.dp),
+                    .height(88.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Spacer(Modifier.weight(1f))
 
-            PlayerIconButton(onClick = { playerConnection.seekToPrevious() }, size = 60.dp) {
+            PlayerIconButton(onClick = { playerConnection.seekToPrevious() }, size = 56.dp) {
                 Icon(
                     painter = painterResource(R.drawable.skip_previous),
                     contentDescription = stringResource(R.string.widget_previous),
                     tint = Color.White,
-                    modifier = Modifier.size(34.dp),
+                    modifier = Modifier.size(32.dp),
                 )
             }
 
-            Spacer(Modifier.width(metrics.block.dp))
+            Spacer(Modifier.weight(1f))
 
             PlayPauseGlyph(
                 isPlaying = model?.isPlaying == true,
                 onClick = { playerConnection.player.togglePlayPause() },
             )
 
-            Spacer(Modifier.width(metrics.block.dp))
+            Spacer(Modifier.weight(1f))
 
-            PlayerIconButton(onClick = { playerConnection.seekToNext() }, size = 60.dp) {
+            PlayerIconButton(onClick = { playerConnection.seekToNext() }, size = 56.dp) {
                 Icon(
                     painter = painterResource(R.drawable.skip_next),
                     contentDescription = stringResource(R.string.next),
                     tint = Color.White,
-                    modifier = Modifier.size(34.dp),
+                    modifier = Modifier.size(32.dp),
                 )
             }
 
             Spacer(Modifier.weight(1f))
         }
 
-        // ── 音量 ─────────────────────────────────────────
+        // ── 音量（端末のメディア音量） ─────────────────────
+        // 書き込み先は端末の音量。画面のスライダーと音量キーが同じ値を指す。
         Row(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .height(36.dp),
+                    .height(40.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                painter = painterResource(if (volume <= 0.01f) R.drawable.volume_off else R.drawable.volume_up),
+                painter =
+                    painterResource(
+                        if (deviceVolume.isMuted) R.drawable.volume_off else R.drawable.volume_up,
+                    ),
                 contentDescription = null,
-                tint = Color.White.copy(alpha = 0.50f),
-                modifier = Modifier.size(15.dp),
+                tint = Color.White.copy(alpha = 0.60f),
+                modifier = Modifier.size(16.dp),
             )
 
             Scrubber(
-                positionMs = (volume.coerceIn(0f, 1f) * 1000f).roundToLong(),
+                positionMs = (deviceVolume.fraction * 1000f).roundToLong(),
                 durationMs = 1000L,
-                onSeek = { ms -> playerConnection.player.volume = (ms / 1000f).coerceIn(0f, 1f) },
-                playedColor = Color.White.copy(alpha = 0.85f),
+                onSeek = { ms -> deviceVolume.setFraction(ms / 1000f) },
+                playedColor = Color.White,
+                trackColor = Color.White.copy(alpha = 0.26f),
+                showThumb = false,
                 modifier =
                     Modifier
                         .weight(1f)
-                        .padding(horizontal = metrics.sm.dp),
+                        .padding(horizontal = metrics.md.dp),
             )
 
             Icon(
                 painter = painterResource(R.drawable.volume_up),
                 contentDescription = stringResource(R.string.volume),
-                tint = Color.White.copy(alpha = 0.50f),
-                modifier = Modifier.size(18.dp),
+                tint = Color.White.copy(alpha = 0.60f),
+                modifier = Modifier.size(16.dp),
             )
         }
 
-        // ── 出力先と歌詞・キュー ───────────────────────────
+        // ── 最下部：歌詞（左）・出力先（中央）・再生キュー（右） ──
         Row(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
+                    .height(56.dp)
                     .padding(bottom = metrics.xs.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                painter = painterResource(R.drawable.cast_output),
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.55f),
-                modifier = Modifier.size(17.dp),
-            )
-
-            Spacer(Modifier.width(metrics.sm.dp))
-
-            Text(
-                text = deviceName,
-                style = type.footnote,
-                color = Color.White.copy(alpha = 0.55f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-
             PlayerIconButton(onClick = onOpenLyrics) {
                 Icon(
                     painter = painterResource(R.drawable.lyrics),
@@ -562,7 +566,28 @@ fun PlayerScreen(
                 )
             }
 
-            Spacer(Modifier.width(metrics.sm.dp))
+            Spacer(Modifier.weight(1f))
+
+            // 出力先は中央。名前が無い（端末内蔵）ときは何も描かない。
+            if (deviceName.isNotBlank()) {
+                Icon(
+                    painter = painterResource(R.drawable.cast_output),
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.55f),
+                    modifier = Modifier.size(15.dp),
+                )
+                Spacer(Modifier.width(metrics.xs.dp))
+                Text(
+                    text = deviceName,
+                    style = type.caption,
+                    color = Color.White.copy(alpha = 0.55f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 150.dp),
+                )
+            }
+
+            Spacer(Modifier.weight(1f))
 
             PlayerIconButton(onClick = onOpenQueue) {
                 Icon(
@@ -623,7 +648,7 @@ private fun PlayPauseGlyph(
     Box(
         modifier =
             Modifier
-                .size(72.dp)
+                .size(76.dp)
                 .graphicsLayer { scaleX = scale; scaleY = scale }
                 .clickable(
                     interactionSource = interactionSource,
@@ -640,7 +665,7 @@ private fun PlayPauseGlyph(
                 painter = painterResource(if (playing) R.drawable.pause else R.drawable.play),
                 contentDescription = if (playing) stringResource(R.string.widget_pause) else stringResource(R.string.play),
                 tint = Color.White,
-                modifier = Modifier.size(56.dp),
+                modifier = Modifier.size(50.dp),
             )
         }
     }

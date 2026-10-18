@@ -33,6 +33,7 @@ import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.constants.AccountNameKey
 import moe.rukamori.archivetune.constants.AudioNormalizationKey
 import moe.rukamori.archivetune.constants.AutoDownloadOnLikeKey
+import moe.rukamori.archivetune.constants.CrossfadeEnabledKey
 import moe.rukamori.archivetune.constants.DarkMode
 import moe.rukamori.archivetune.constants.DarkModeKey
 import moe.rukamori.archivetune.constants.ExternalDownloaderEnabledKey
@@ -188,6 +189,7 @@ private fun PlaybackGroup() {
     var pauseOnMute by rememberPreference(PauseOnDeviceMuteKey, defaultValue = false)
     var skipSilence by rememberPreference(SkipSilenceKey, defaultValue = false)
     var normalization by rememberPreference(AudioNormalizationKey, defaultValue = false)
+    var crossfade by rememberPreference(CrossfadeEnabledKey, defaultValue = false)
 
     SettingsGroup(title = stringResource(R.string.settings_playback_title)) {
         SettingsRow(
@@ -220,6 +222,16 @@ private fun PlaybackGroup() {
             onClick = { normalization = !normalization },
             trailing = {
                 AppleSwitch(checked = normalization, onCheckedChange = { normalization = it })
+            },
+        )
+        // クロスフェード。以前はキューの下に置いていたが、Apple Music と同じく
+        // 再生の設定としてここへ移した。
+        SettingsRow(
+            title = stringResource(R.string.crossfade),
+            showDivider = true,
+            onClick = { crossfade = !crossfade },
+            trailing = {
+                AppleSwitch(checked = crossfade, onCheckedChange = { crossfade = it })
             },
         )
     }

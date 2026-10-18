@@ -74,7 +74,12 @@ fun SettingsGroup(
         }
 
         GlassSurface(
-            modifier = Modifier.fillMaxWidth(),
+            // 画面幅いっぱいまで伸ばさない。左右にガターを取り、カードとして立たせる
+            // （Apple Music の設定も同じく左右が空いたカードで並ぶ）。
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = metrics.gutter.dp),
             shape = RoundedCornerShape(metrics.cardCorner.dp),
         ) {
             Column(

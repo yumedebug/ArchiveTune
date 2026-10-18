@@ -42,7 +42,7 @@
     <string name="no_results_found">結果が見つかりませんでした</string>
     <string name="top_results">上位の結果</string>
     <string name="most_played_badge">最もプレイされた</string>
-    <string name="play_all">すべてプレイする</string>
+    <string name="play_all">すべて再生</string>
     <string name="offline_shortcut">オフライン</string>
     <string name="cached">キャッシュされた</string>
     <string name="local_files">ローカルファイル</string>
@@ -128,13 +128,14 @@
     <string name="cast_available_device_count">見つかったデバイス: %1$d</string>
     <string name="cast_route_picker_unavailable">現在キャストは利用できません。</string>
     <string name="shuffle">シャッフル</string>
+    <string name="queue_repeat">リピート</string>
     <string name="music_recognition">音楽認識</string>
     <string name="reset">リセット</string>
     <string name="details">詳細</string>
     <string name="edit">編集</string>
     <string name="start_radio">ラジオを開始する</string>
     <string name="start_mix">ミックスを開始する</string>
-    <string name="play">遊ぶ</string>
+    <string name="play">再生</string>
     <string name="widget_pause">一時停止</string>
     <string name="widget_previous">前へ</string>
     <string name="widget_tap_to_open">タップして ArchiveTune を開きます</string>

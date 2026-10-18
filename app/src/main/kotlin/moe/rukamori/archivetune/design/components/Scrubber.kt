@@ -51,6 +51,9 @@ import moe.rukamori.archivetune.design.applePalette
  * @param positionMs 再生位置。ドラッグ中は呼び出し側が追従した値を入れる。
  * @param durationMs 合計時間。0以下ならシークを受付けず、つまみも描かない。
  * @param onSeek 決定位置（ミリ秒）。ドラッグ中は連続、タップは一回。
+ * @param showThumb つまみ（丸）を描くか。全画面プレイヤーとキューでは
+ *   Apple Music と同じく**置かない**（触っている間だけ太くなる帯だけを見せる）。
+ * @param trackColor 未再生側の帯の色。`null` ならパレットのフィル。
  */
 @Composable
 fun Scrubber(
@@ -62,9 +65,12 @@ fun Scrubber(
     // 進行済みの帯とつまみの色。`null` ならアクセント。全画面プレイヤーでは
     // ジャケットの色が画面を支配するので、白にして主張を消す。
     playedColor: Color? = null,
+    trackColor: Color? = null,
+    showThumb: Boolean = true,
 ) {
     val palette = applePalette()
     val played = playedColor ?: palette.accent
+    val track = trackColor ?: palette.fill
 
     // ポインタ入力のラムダは初回だけ構築されるため、後から変わる値は
     // State 経由で読む。これでラムダが掴んだ参照でも常に最新値になる。
@@ -147,7 +153,7 @@ fun Scrubber(
         val centerX = size.width * fraction
 
         drawRoundRect(
-            color = palette.fill,
+            color = track,
             topLeft = Offset(0f, topY),
             size = Size(size.width, thicknessPx),
             cornerRadius = CornerRadius(radius, radius),
@@ -160,10 +166,12 @@ fun Scrubber(
                 cornerRadius = CornerRadius(radius, radius),
             )
         }
-        drawCircle(
-            color = played,
-            radius = thumbRadius.toPx(),
-            center = Offset(centerX, centerY),
-        )
+        if (showThumb) {
+            drawCircle(
+                color = played,
+                radius = thumbRadius.toPx(),
+                center = Offset(centerX, centerY),
+            )
+        }
     }
 }
