@@ -15,12 +15,14 @@ import android.os.Looper
 import android.provider.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 /**
@@ -33,8 +35,8 @@ import kotlin.math.roundToInt
  * 再生エンジン（ExoPlayer の `volume`）には触れない。あちらは曲ごとの
  * フェード等が使う内部値で、端末の音量とは別の層である。
  *
- * 値の購読は [Settings.System.VOLUME_SETTINGS] の監視で行う。[sync] は
- * 監視からも呼ばれるので、自分で書いた直後以外の変化にも追従する。
+ * 値の購読は設定値の監視と短い間隔の読み直しで行う。[sync] はどちらからも
+ * 呼ばれるので、自分で書いた直後以外の変化にも追従する。
  */
 @Stable
 class DeviceVolume internal constructor(
@@ -79,8 +81,17 @@ class DeviceVolume internal constructor(
 /**
  * 端末のメディア音量を購読する。
  *
- * 画面を離れると監視を外す。音量は端末が持つ値なので、画面側に
- * 書き戻すものは無い（閉じても元に戻さない）。
+ * 端末側で変わった値（音量キー・音量パネル・他アプリ・Bluetooth の絶対音量）を
+ * 画面へ反映するために2段構えにする。
+ *
+ *  - [Settings.System.CONTENT_URI] の監視。音量は `Settings.System` に書かれる
+ *    ので、その書き込みで読み直す
+ *  - 念のため1秒ごとの読み直し。書かれ方を変える端末（絶対音量など）でも
+ *    表示が実際の音量からずれないようにする
+ *
+ * 値が変わっていなければ Compose の状態は通知しないので、読み直しの負担は
+ * その場の1回の読み取りだけである。画面を離れるとどちらも止める（音量は
+ * 端末が持つ値なので、画面側から書き戻すものは無い）。
  */
 @Composable
 fun rememberDeviceVolume(): DeviceVolume {
@@ -98,13 +109,23 @@ fun rememberDeviceVolume(): DeviceVolume {
                 }
             }
         context.contentResolver.registerContentObserver(
-            Settings.System.getUriFor(Settings.System.VOLUME_SETTINGS[AudioManager.STREAM_MUSIC]),
-            false,
+            Settings.System.CONTENT_URI,
+            true,
             observer,
         )
         volume.sync()
         onDispose { context.contentResolver.unregisterContentObserver(observer) }
     }
 
+    LaunchedEffect(volume) {
+        while (true) {
+            delay(VOLUME_POLL_MS)
+            volume.sync()
+        }
+    }
+
     return volume
 }
+
+/** 音量を読み直す間隔。表示が実際の値からずれないための保険。 */
+private const val VOLUME_POLL_MS = 1000L
