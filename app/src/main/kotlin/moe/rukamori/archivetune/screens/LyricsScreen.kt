@@ -12,8 +12,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -39,7 +39,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -52,7 +51,6 @@ import kotlinx.coroutines.isActive
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
-import moe.rukamori.archivetune.design.appleMetrics
 import moe.rukamori.archivetune.design.appleType
 import moe.rukamori.archivetune.design.components.CurrentTrackHeader
 import moe.rukamori.archivetune.design.components.EmptyState
@@ -61,14 +59,30 @@ import moe.rukamori.archivetune.design.components.LoadingState
 import moe.rukamori.archivetune.viewmodels.LyricsRenderScreenState
 import moe.rukamori.archivetune.viewmodels.LyricsRenderViewModel
 
+/** 現在行を画面の上から何割の位置へ置くか。 */
+private const val ACTIVE_LINE_ANCHOR = 0.34f
+
+/** 現在行以外の不透明度。 */
+private const val INACTIVE_LINE_ALPHA = 0.30f
+
+/** 上下で歌詞を溶かす帯の高さ。 */
+private val FADE_HEIGHT = 72.dp
+
 /**
  * 全画面の同期歌詞。
  *
- * 歌詞そのものと取得は既存の [LyricsRenderViewModel] に任せる（歌詞取得まわりは
- * 触らない方針）。ここに足すのは表示と同期だけ。
+ * 歌詞そのものの解析は既存の [LyricsRenderViewModel] に任せる（歌詞プロバイダと
+ * 解析は触らない方針）。この画面から足すのは表示と同期、そして**取得のきっかけ**
+ * だけ。端末に歌詞が無いまま画面を開くと、行が作られずに読み込みで止まって
+ * しまうため、[LyricsRenderViewModel.ensureLyrics] を呼んで1曲につき1回だけ
+ * 取りに行かせる。
+ *
+ * Apple Music の歌詞と同じ組み方にしている。**行の大きさは全行で同じ**にし、
+ * 現在行だけを白、それ以外を薄く落とす（大きさを変えると視線が行ごとに跳ねる）。
+ * 前後の行は上下の帯で背景へ溶かし、いま歌っている一節だけが浮かぶようにする。
  *
  * 同期は行単位。再生位置が進むと「開始時刻が最も新しい行」がアクティブになり、
- * その行だけ白く大きく、それ以外は薄くなる。行が変わったら自動で中央へ送る。
+ * 画面の上から [ACTIVE_LINE_ANCHOR] の位置へ自動で送られる。
  *
  * 行をタップするとその行の先頭へシークする。歌詞側からも再生へ戻せる。
  *
@@ -82,7 +96,6 @@ fun LyricsScreen(
     val playerConnection = LocalPlayerConnection.current ?: return
     val windowInsets = LocalPlayerAwareWindowInsets.current
     val viewModel: LyricsRenderViewModel = hiltViewModel()
-    val metrics = appleMetrics()
     val type = appleType()
 
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
@@ -97,12 +110,16 @@ fun LyricsScreen(
     // 歌詞の読み込みは曲ごとに1回だけ。duration が後から確定し直しても
     // 再バインドすると取得がやり直されるため、1曲で固定する。
     LaunchedEffect(mediaId) {
-        if (mediaId.isNullOrBlank()) return@LaunchedEffect
+        val metadata = mediaMetadata
+        if (metadata == null || metadata.id.isBlank()) return@LaunchedEffect
         val resolved =
-            mediaMetadata?.duration?.takeIf { it > 0 }?.toLong()?.times(1000L)
+            metadata.duration.takeIf { it > 0 }?.toLong()?.times(1000L)
                 ?: playerConnection.player.duration.takeIf { it > 0L && it != C.TIME_UNSET }
                 ?: 0L
-        viewModel.bind(mediaId, resolved)
+        viewModel.bind(metadata.id, resolved)
+        // 端末に歌詞が無ければここで取りに行かせる。取得が無いと
+        // この画面は読み込みのまま止まってしまう。
+        viewModel.ensureLyrics(metadata)
     }
 
     LaunchedEffect(mediaId, playbackState) {
@@ -156,10 +173,12 @@ fun LyricsScreen(
     val listState = rememberLazyListState()
     var viewportHeight by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
+    // 現在行を上から [ACTIVE_LINE_ANCHOR] の位置へ置けるだけの前後の余白。
+    val anchorSpace = with(density) { (viewportHeight * ACTIVE_LINE_ANCHOR).toDp() }
 
-    LaunchedEffect(currentIndex, viewportHeight) {
+    LaunchedEffect(currentIndex, viewportHeight, lines.size) {
         if (currentIndex !in lines.indices || viewportHeight <= 0) return@LaunchedEffect
-        val offset = with(density) { -(viewportHeight / 2) }
+        val offset = with(density) { -(viewportHeight * ACTIVE_LINE_ANCHOR).toInt() }
         listState.animateScrollToItem(currentIndex, offset)
     }
 
@@ -210,100 +229,112 @@ fun LyricsScreen(
             }
 
             is LyricsRenderScreenState.Success -> {
-                LazyColumn(
-                    state = listState,
+                Box(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .weight(1f)
-                            .onSizeChanged { viewportHeight = it.height },
-                    horizontalAlignment = Alignment.Start,
+                            .weight(1f),
                 ) {
-                    itemsIndexed(
-                        items = state.lyrics.lines,
-                        key = { index, _ -> index },
-                    ) { index, line ->
-                        val isCurrent = index == currentIndex
-
-                        // Apple Music の歌詞は行を左右に段違いに並べる。
-                        // 位置は**行番号だけで**決める。アクティブ行を基準にすると
-                        // 再生が進むたびに段が入れ替わって視線が迷うため。
-                        val indented = index % 2 == 1
-
-                        val color by
-                            animateColorAsState(
-                                targetValue =
-                                    if (isCurrent) {
-                                        Color.White
-                                    } else {
-                                        Color.White.copy(alpha = 0.34f)
-                                    },
-                                animationSpec = tween(320),
-                                label = "lyricLine",
-                            )
-
-                        val text = line.text.ifEmpty {
-                            if (line.isInstrumental) "—" else ""
-                        }
-                        if (text.isNotEmpty()) {
-                            Text(
-                                text = text,
-                                style =
-                                    if (isCurrent) {
-                                        type.title3
-                                    } else {
-                                        type.body
-                                    },
-                                color = color,
-                                fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
-                                textAlign = TextAlign.Start,
-                                maxLines = 4,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .clickable(
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            indication = null,
-                                        ) { seekTo(line.startMs) }
-                                        .padding(
-                                            start =
-                                                if (indented) {
-                                                    metrics.gutter.dp + 44.dp
-                                                } else {
-                                                    metrics.gutter.dp
-                                                },
-                                            end = metrics.gutter.dp,
-                                            top = metrics.sm.dp,
-                                            bottom = metrics.sm.dp,
-                                        ),
-                            )
+                    LazyColumn(
+                        state = listState,
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .onSizeChanged { viewportHeight = it.height },
+                        horizontalAlignment = Alignment.Start,
+                    ) {
+                        // 端に寄った行が背景へ溶けるように、前後に余白を置く。
+                        item(key = "lead") {
+                            Box(Modifier.height(anchorSpace))
                         }
 
-                        if (line.translation != null) {
-                            Text(
-                                text = line.translation.orEmpty(),
-                                style = type.subhead,
-                                color = Color.White.copy(alpha = if (isCurrent) 0.72f else 0.28f),
-                                textAlign = TextAlign.Start,
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .padding(
-                                            start =
-                                                if (indented) {
-                                                    metrics.gutter.dp + 44.dp
-                                                } else {
-                                                    metrics.gutter.dp
-                                                },
-                                            end = metrics.gutter.dp,
-                                            bottom = metrics.sm.dp,
+                        itemsIndexed(
+                            items = state.lyrics.lines,
+                            key = { index, _ -> index },
+                        ) { index, line ->
+                            val isCurrent = index == currentIndex
+
+                            // 大きさは全行で同じ。変わってよいのは白の濃さだけ。
+                            val color by
+                                animateColorAsState(
+                                    targetValue =
+                                        if (isCurrent) {
+                                            Color.White
+                                        } else {
+                                            Color.White.copy(alpha = INACTIVE_LINE_ALPHA)
+                                        },
+                                    animationSpec = tween(280),
+                                    label = "lyricLine",
+                                )
+
+                            val text = line.text.ifEmpty {
+                                if (line.isInstrumental) "♪" else ""
+                            }
+                            if (text.isNotEmpty()) {
+                                Text(
+                                    text = text,
+                                    style = type.title1,
+                                    color = color,
+                                    textAlign = TextAlign.Start,
+                                    maxLines = 6,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clickable(
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                indication = null,
+                                            ) { seekTo(line.startMs) }
+                                            .padding(horizontal = 24.dp, vertical = 6.dp),
+                                )
+                            }
+
+                            if (!line.translation.isNullOrBlank()) {
+                                Text(
+                                    text = line.translation.orEmpty(),
+                                    style = type.subhead,
+                                    color =
+                                        Color.White.copy(
+                                            alpha = if (isCurrent) 0.70f else 0.22f,
                                         ),
-                            )
+                                    textAlign = TextAlign.Start,
+                                    maxLines = 4,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(horizontal = 24.dp),
+                                )
+                            }
+                        }
+
+                        item(key = "tail") {
+                            Box(Modifier.height(anchorSpace * 2))
                         }
                     }
+
+                    // 上端はヘッダーへ、下端は画面外へ溶かす。
+                    Box(
+                        modifier =
+                            Modifier
+                                .align(Alignment.TopCenter)
+                                .fillMaxWidth()
+                                .height(FADE_HEIGHT)
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(backdrop.top, Color.Transparent),
+                                    ),
+                                ),
+                    )
+                    Box(
+                        modifier =
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .height(FADE_HEIGHT)
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(Color.Transparent, backdrop.bottom),
+                                    ),
+                                ),
+                    )
                 }
             }
         }

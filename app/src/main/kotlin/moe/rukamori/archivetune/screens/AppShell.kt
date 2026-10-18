@@ -297,7 +297,6 @@ fun AppShell(
                         .zIndex(1f),
             ) {
                 MiniPlayer(
-                    modifier = Modifier.padding(horizontal = metrics.md.dp),
                     onOpenPlayer = { navController.navigate(Routes.Player) },
                 )
                 GlassNavigationBar(

@@ -22,21 +22,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.RectangleShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -59,13 +56,15 @@ data class NavigationTab(
 )
 
 /**
- * 浮遊カプセル型のボトムナビゲーション。
+ * ボトムナビゲーション。
  *
- * 背後の画面を [dev.chrisbanes.haze.HazeState] で捕捉して実際にブラーする
- * 「ガラス」の面を使う。透明度を下げただけの帯にはしない。
+ * Apple Music のタブバーと同じく**画面幅いっぱいの帯**にする。浮かせたカプセルは
+ * 他社のプレイヤーの記号で、下に何も無い帯に見えないため採用しない。背後の画面を
+ * [dev.chrisbanes.haze.HazeState] で捕捉して実際にブラーし、上端のヘアラインで
+ * 本文と区切る。
  *
  * Apple Music と同じく **記号とラベル**を縦に並べる。記号だけの5つは読み切りにくく、
- * タブの取り違えが起きるため。文字は [appleType().caption2]（11sp）を丸く小さく組み、
+ * タブの取り違えが起きるため。文字は [appleType().micro]（11sp）を丸く小さく組み、
  * 1画面に占める面積は押さえる。
  *
  * 選択中は [ApplePalette.accent]（ピンクレッド）、非選択は二次ラベル色に落とし、
@@ -82,48 +81,40 @@ fun GlassNavigationBar(
     onSelect: (NavigationTab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(28.dp)
+    val metrics = appleMetrics()
+    val density = LocalDensity.current
+    val systemBars = WindowInsets.systemBars
+    // ジェスチャバーの下へも面を伸ばす（iOS のタブバーと同じ）。帯の高さに
+    // セーフエリアを足し、**中身だけ**を持ち上げる。面を浮かせると、帯の下に
+    // 本文が覗いて「置き忘れた板」に見えてしまう。
+    val bottomInset = with(density) { systemBars.getBottom(density).toDp() }
 
-    Row(
+    Box(
         modifier =
             modifier
                 .fillMaxWidth()
-                .windowInsetsPadding(
-                    WindowInsets.systemBars.only(
-                        WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
-                    ),
-                )
-                // ジェスチャバーのすぐ上に浮かせるためのわずかな隙間。
-                .padding(bottom = appleMetrics().xs.dp)
-                // ミニプレイヤーと同じく左右を浮かせて、全面に張り付かない面にする。
-                .padding(horizontal = appleMetrics().md.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
+                .height(metrics.navBarHeight.dp + bottomInset),
     ) {
-        Surface(
-            modifier =
-                Modifier
-                    .weight(1f)
-                    .widthIn(max = 460.dp)
-                    .height(appleMetrics().navBarHeight.dp),
-            shape = shape,
-            color = Color.Transparent,
-            tonalElevation = 0.dp,
-            shadowElevation = 8.dp,
-        ) {
-            GlassSurface(shape = shape) {
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    tabs.forEach { tab ->
-                        TabItem(
-                            tab = tab,
-                            selected = tab.route == selectedRoute,
-                            onSelect = onSelect,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
+        // 上端のヘアラインは GlassSurface が描く。
+        GlassSurface(shape = RectangleShape) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .windowInsetsPadding(
+                            systemBars.only(
+                                WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
+                            ),
+                        ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                tabs.forEach { tab ->
+                    TabItem(
+                        tab = tab,
+                        selected = tab.route == selectedRoute,
+                        onSelect = onSelect,
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
         }
@@ -162,11 +153,11 @@ private fun TabItem(
                 painter = painterResource(if (selected) tab.iconActive else tab.iconInactive),
                 contentDescription = null,
                 tint = contentColor,
-                modifier = Modifier.size(23.dp),
+                modifier = Modifier.size(24.dp),
             )
             Text(
                 text = stringResource(tab.labelId),
-                style = type.caption,
+                style = type.micro,
                 // 選択中のタブだけ字重を上げ、色と併せて識別の手がかりを二重にする。
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 color = contentColor,

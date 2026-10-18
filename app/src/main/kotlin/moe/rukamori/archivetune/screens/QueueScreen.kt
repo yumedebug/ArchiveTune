@@ -7,19 +7,17 @@
 
 package moe.rukamori.archivetune.screens
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,7 +28,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SwipeToDismissBox
@@ -55,8 +52,6 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -73,16 +68,11 @@ import moe.rukamori.archivetune.constants.CrossfadeEnabledKey
 import moe.rukamori.archivetune.design.appleMetrics
 import moe.rukamori.archivetune.design.applePalette
 import moe.rukamori.archivetune.design.appleType
+import moe.rukamori.archivetune.design.components.Artwork
 import moe.rukamori.archivetune.design.components.CurrentTrackHeader
 import moe.rukamori.archivetune.design.components.EmptyState
-import moe.rukamori.archivetune.design.components.PillToggle
-import moe.rukamori.archivetune.design.components.PlayerCircleButton
-import moe.rukamori.archivetune.design.components.Scrubber
-import moe.rukamori.archivetune.design.components.SongRow
-import moe.rukamori.archivetune.design.components.formatDuration
 import moe.rukamori.archivetune.db.entities.Song
 import moe.rukamori.archivetune.extensions.metadata
-import moe.rukamori.archivetune.extensions.togglePlayPause
 import moe.rukamori.archivetune.models.MediaMetadata
 import moe.rukamori.archivetune.models.toMediaMetadata
 import moe.rukamori.archivetune.utils.rememberPreference
@@ -92,33 +82,42 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 /** 履歴として出す件数。上端のブロックが縦に伸びきらないように抑える。 */
 private const val HISTORY_LIMIT = 5
 
-/**
- * 再生位置の測り直し間隔（再生中）。
- */
+/** 再生位置の測り直し間隔（再生中）。 */
 private const val POSITION_POLL_MS = 500L
 
 /** 再生位置の測り直し間隔（停止中）。 */
 private const val POSITION_POLL_IDLE_MS = 1500L
 
 /**
- * 「履歴」と「次に再生」をまとめて置くブロック。
+ * 「History」と「Playing Next」をまとめて置くブロック。
  *
  * 並べ替えの着地点を固定するため、この1つの item を常に先頭に置き、
  * キュー行は**常に index 1 から**始まるようにする。
  */
 private const val QUEUE_PRELUDE_INDEX = 1
 
+/** 先頭に置く取っ手の高さ。 */
+private val GRABBER_HEIGHT = 22.dp
+
+/** 下端に置く進行線の高さ。 */
+private val PROGRESS_HEIGHT = 2.dp
+
 /**
- * 再生キュー。
+ * 再生キュー（Apple Music の "Playing Next"）。
  *
- * 再生エンジン側の [androidx.media3.exoplayer.source.Timeline.Window] の並びを
- * **そのまま見せる**ため、ViewModel を持たない。表示は [androidx.media3.Player] の
- * 状態を直接観察するものだけに限る。
+ * 再生エンジン側の [Timeline.Window] の並びを**そのまま見せる**ため、
+ * ViewModel を持たない。表示は [Player] の状態を直接観察するものだけに限る。
  *
- * 構成は Apple Music のキューと同じ骨格：
- * 上端に Now Playing の縮小版 [CurrentTrackHeader]、その下に横長のモードボタン
- * （シャッフル／リピート／リピート1曲）と自動再生・クロスフェードの切り替え、
- * その下から履歴 → 「次に再生」 → キュー行、最下部がシークバーと再生コントロール。
+ * 組み方は Apple Music のキューに寄せている。
+ *
+ *  - 上端は取っ手と Now Playing の縮小版 [CurrentTrackHeader]、その下に細い進行線
+ *  - 本文は「History」→「Playing Next」→ 予定の曲。**予定の曲は
+ *    ジャケット＋曲名＋アーティストだけ**の行にし、再生時間や「…」は置かない
+ *  - いちばん下は**無地のアイコンだけ**のモード行（シャッフル／リピート／
+ *    リピート1曲／自動再生／クロスフェード）。白い面で塗るピル型のトグルは
+ *    他社のプレイヤーの記号なので使わない
+ *  - **搬送（再生・送り）はここに置かない**。Apple Music 同様、それは
+ *    Now Playing の役割で、この画面は並びを見る画面に絞る
  *
  * 背景は全画面プレイヤーと同じく [rememberArtworkBackdrop] から取るので、
  * 画面を切り替えても色は飛ばない。
@@ -139,7 +138,6 @@ fun QueueScreen(
     val windowInsets = LocalPlayerAwareWindowInsets.current
     val palette = applePalette()
     val metrics = appleMetrics()
-    val type = appleType()
 
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
     val isPlaying by playerConnection.isPlaying.collectAsState()
@@ -149,7 +147,7 @@ fun QueueScreen(
     val shuffleEnabled by playerConnection.shuffleModeEnabled.collectAsState()
     val repeatMode by playerConnection.repeatMode.collectAsState()
 
-    // ピル2つ分の裏側。どちらも MusicService が DataStore から読んで効かせるので、
+    // モード行の裏側。どちらも MusicService が DataStore から読んで効かせるので、
     // 画面側は書き込むだけにする。
     var autoLoadMore by rememberPreference(AutoLoadMoreKey, true)
     var crossfade by rememberPreference(CrossfadeEnabledKey, false)
@@ -161,10 +159,6 @@ fun QueueScreen(
             mediaId = mediaMetadata?.id,
             thumbnailUrl = mediaMetadata?.thumbnailUrl,
         )
-    val animatedTop by
-        animateColorAsState(targetValue = backdrop.top, animationSpec = tween(650), label = "queueTop")
-    val animatedBottom by
-        animateColorAsState(targetValue = backdrop.bottom, animationSpec = tween(650), label = "queueBottom")
 
     // 抽出色はどちらのテーマでも暗い側に寄る。ライトテーマでは黒い面に
     // 黒い文字は読めないので、テーマ側の地色を半透明で掛けて明度を戻す。
@@ -176,7 +170,7 @@ fun QueueScreen(
             Color.Black.copy(alpha = DARK_SCRIM_ALPHA)
         }
 
-    // 進行バー用。曲ごとに測り直す。
+    // 進行線用。曲ごとに測り直す。
     var positionMs by remember(mediaMetadata?.id) { mutableLongStateOf(0L) }
     var durationMs by remember(mediaMetadata?.id) { mutableLongStateOf(0L) }
     LaunchedEffect(mediaMetadata?.id, isPlaying) {
@@ -244,7 +238,7 @@ fun QueueScreen(
         modifier =
             modifier
                 .fillMaxSize()
-                .background(Brush.verticalGradient(colors = listOf(animatedTop, animatedBottom))),
+                .background(Brush.verticalGradient(colors = listOf(backdrop.top, backdrop.bottom))),
     ) {
         // 下絵は 48px に縮めたものなので、画面いっぱいに伸ばすだけで自然にぼける。
         backdrop.artwork?.let { art ->
@@ -263,67 +257,44 @@ fun QueueScreen(
                     .fillMaxSize()
                     .windowInsetsPadding(windowInsets),
         ) {
+            // ── 取っ手。シートとして持ち上げる動きに合わせる ────────
+            Box(
+                modifier = Modifier.fillMaxWidth().height(GRABBER_HEIGHT),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(width = 36.dp, height = 5.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(Color.White.copy(alpha = 0.35f)),
+                )
+            }
+
             CurrentTrackHeader(onBack = onBack)
 
-            // ── モードボタン列 ──────────────────────────
-            // 左にシャッフル・リピート・リピート1曲の横長ボタン3つ。
-            // 右に自動再生とクロスフェードの切り替えを寄せる。
-            Row(
+            // ── 細い進行線 ───────────────────────────────────
+            val progress =
+                if (durationMs > 0L) {
+                    (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+                } else {
+                    0f
+                }
+            Box(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .padding(
-                            start = metrics.gutter.dp,
-                            end = metrics.gutter.dp,
-                            top = metrics.xs.dp,
-                        ),
-                verticalAlignment = Alignment.CenterVertically,
+                        .padding(horizontal = metrics.gutter.dp, vertical = metrics.sm.dp)
+                        .height(PROGRESS_HEIGHT)
+                        .clip(RoundedCornerShape(PROGRESS_HEIGHT / 2))
+                        .background(Color.White.copy(alpha = 0.22f)),
             ) {
-                PillToggle(
-                    icon = if (shuffleEnabled) R.drawable.shuffle_on else R.drawable.shuffle,
-                    selected = shuffleEnabled,
-                    onClick = { playerConnection.player.shuffleModeEnabled = !shuffleEnabled },
-                    contentDescription = stringResource(R.string.shuffle),
-                )
-
-                Spacer(Modifier.width(metrics.xs.dp))
-
-                PillToggle(
-                    icon = if (repeatMode == Player.REPEAT_MODE_ALL) R.drawable.repeat_on else R.drawable.repeat,
-                    selected = repeatMode == Player.REPEAT_MODE_ALL,
-                    onClick = {
-                        playerConnection.player.repeatMode =
-                            if (repeatMode == Player.REPEAT_MODE_ALL) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ALL
-                    },
-                    contentDescription = stringResource(R.string.repeat_mode_all),
-                )
-
-                Spacer(Modifier.width(metrics.xs.dp))
-
-                PillToggle(
-                    icon = if (repeatMode == Player.REPEAT_MODE_ONE) R.drawable.repeat_one_on else R.drawable.repeat_one,
-                    selected = repeatMode == Player.REPEAT_MODE_ONE,
-                    onClick = {
-                        playerConnection.player.repeatMode =
-                            if (repeatMode == Player.REPEAT_MODE_ONE) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ONE
-                    },
-                    contentDescription = stringResource(R.string.repeat_mode_one),
-                )
-
-                Spacer(Modifier.weight(1f))
-
-                PillToggle(
-                    icon = R.drawable.infinity,
-                    selected = autoLoadMore,
-                    onClick = { autoLoadMore = !autoLoadMore },
-                    contentDescription = stringResource(R.string.autoplay),
-                )
-
-                Spacer(Modifier.width(metrics.xs.dp))
-
-                QueueSwitch(
-                    checked = crossfade,
-                    onToggle = { crossfade = !crossfade },
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth(progress)
+                            .fillMaxHeight()
+                            .background(Color.White),
                 )
             }
 
@@ -345,7 +316,7 @@ fun QueueScreen(
                     state = listState,
                     contentPadding = PaddingValues(bottom = metrics.sm.dp),
                 ) {
-                    // 履歴と「次に再生」の見出し。必ず先頭に1つだけ置き、
+                    // 履歴と「Playing Next」の見出し。必ず先頭に1つだけ置き、
                     // キュー行の番号（lazy index 1 〜）を固定する。
                     item(key = "prelude") {
                         Column {
@@ -394,7 +365,7 @@ fun QueueScreen(
                                     },
                                     modifier = Modifier.weight(1f),
                                 ) {
-                                    QueueRow(
+                                    QueueTrackRow(
                                         window = window,
                                         onClick = {
                                             playerConnection.player.seekToDefaultPosition(window.firstPeriodIndex)
@@ -414,16 +385,70 @@ fun QueueScreen(
                         }
                     }
                 }
+            }
 
-                QueueBottomBar(
-                    positionMs = positionMs,
-                    durationMs = durationMs,
-                    isPlaying = isPlaying,
-                    onSeek = { playerConnection.player.seekTo(it) },
-                    onPlayPause = { playerConnection.player.togglePlayPause() },
-                    onPrevious = { playerConnection.seekToPrevious() },
-                    onNext = { playerConnection.seekToNext() },
-                    onOpenLyrics = onOpenLyrics,
+            // ── モード行 ─────────────────────────────────────
+            // 歌詞（左）と、無地のアイコンだけのモード切替（右）。
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start = metrics.gutter.dp,
+                            end = metrics.gutter.dp,
+                            top = metrics.xs.dp,
+                            bottom = metrics.sm.dp,
+                        ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                QueueModeButton(
+                    icon = R.drawable.lyrics,
+                    selected = false,
+                    onClick = onOpenLyrics,
+                    contentDescription = stringResource(R.string.lyrics),
+                )
+
+                Spacer(Modifier.weight(1f))
+
+                QueueModeButton(
+                    icon = if (shuffleEnabled) R.drawable.shuffle_on else R.drawable.shuffle,
+                    selected = shuffleEnabled,
+                    onClick = { playerConnection.player.shuffleModeEnabled = !shuffleEnabled },
+                    contentDescription = stringResource(R.string.shuffle),
+                )
+
+                QueueModeButton(
+                    icon = if (repeatMode == Player.REPEAT_MODE_ALL) R.drawable.repeat_on else R.drawable.repeat,
+                    selected = repeatMode == Player.REPEAT_MODE_ALL,
+                    onClick = {
+                        playerConnection.player.repeatMode =
+                            if (repeatMode == Player.REPEAT_MODE_ALL) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ALL
+                    },
+                    contentDescription = stringResource(R.string.repeat_mode_all),
+                )
+
+                QueueModeButton(
+                    icon = if (repeatMode == Player.REPEAT_MODE_ONE) R.drawable.repeat_one_on else R.drawable.repeat_one,
+                    selected = repeatMode == Player.REPEAT_MODE_ONE,
+                    onClick = {
+                        playerConnection.player.repeatMode =
+                            if (repeatMode == Player.REPEAT_MODE_ONE) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ONE
+                    },
+                    contentDescription = stringResource(R.string.repeat_mode_one),
+                )
+
+                QueueModeButton(
+                    icon = R.drawable.infinity,
+                    selected = autoLoadMore,
+                    onClick = { autoLoadMore = !autoLoadMore },
+                    contentDescription = stringResource(R.string.autoplay),
+                )
+
+                QueueModeButton(
+                    icon = R.drawable.sync,
+                    selected = crossfade,
+                    onClick = { crossfade = !crossfade },
+                    contentDescription = stringResource(R.string.crossfade),
                 )
             }
         }
@@ -480,8 +505,8 @@ private fun QueueHistorySection(
         }
 
         history.forEachIndexed { index, song ->
-            SongRow(
-                song = song.toMediaMetadata(),
+            QueueMetadataRow(
+                metadata = song.toMediaMetadata(),
                 onClick = { onPlay(index) },
             )
         }
@@ -489,7 +514,7 @@ private fun QueueHistorySection(
 }
 
 /**
- * 「次に再生」の見出し。
+ * 「Playing Next」の見出し。
  *
  * Apple Music は太字の見出しと、その下に小さな出典（プレイリスト名やミックス名）を
  * 重ねる。ここも同じ形で [queueTitle] を出す。自動再生が入っているときは
@@ -547,70 +572,49 @@ private fun ContinueHeader(
 }
 
 /**
- * クロスフェードのスイッチ。
+ * モード行の1ボタン。
  *
- * 添付のキューでは右端にスイッチ型のトグルが置かれている。丸いトグルのままでは
- * 他のピルと混ざるので、外側はピルと同じ面、内側にトラックとつまみを置く。
- *
- * 色はすべて palette 経由。キューの背景はテーマに依存して明るい面にもなるので、
- * 白で固定するとライトテーマでトラックごと消える。
- *
- * @param checked いま有効か。
- * @param onToggle 押したとき。
+ * **面を持たせない。** ピル型に塗ると他社のプレイヤーの記号になり、行が
+ * にぎやかになって曲の並びが読めなくなる。Apple Music のキューと同じく
+ * 記号だけを置き、入っているものだけアクセント色にする。
  */
 @Composable
-private fun QueueSwitch(
-    checked: Boolean,
-    onToggle: () -> Unit,
+private fun QueueModeButton(
+    icon: Int,
+    selected: Boolean,
+    onClick: () -> Unit,
+    contentDescription: String?,
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
     val palette = applePalette()
-    val description = stringResource(R.string.crossfade)
 
     Box(
         modifier =
             Modifier
-                .size(width = 56.dp, height = 36.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(if (checked) palette.accent else palette.fill)
-                .semantics { this.contentDescription = description }
-                .clickable(interactionSource = interactionSource, indication = null) { onToggle() },
+                .size(44.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) { onClick() },
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier =
-                Modifier
-                    .size(width = 40.dp, height = 22.dp)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(
-                        if (checked) {
-                            Color.White.copy(alpha = 0.92f)
-                        } else {
-                            palette.onFill.copy(alpha = 0.35f)
-                        },
-                    ),
-        ) {
-            Box(
-                modifier =
-                    Modifier
-                        .align(if (checked) Alignment.CenterEnd else Alignment.CenterStart)
-                        .padding(3.dp)
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(if (checked) palette.accent else palette.onFill),
-            )
-        }
+        Icon(
+            painter = painterResource(icon),
+            contentDescription = contentDescription,
+            tint = if (selected) palette.accent else palette.onBackground.copy(alpha = 0.75f),
+            modifier = Modifier.size(21.dp),
+        )
     }
 }
 
 /**
  * キュー 1 行。
  *
- * 並べ替えの取っ手は呼び出し側（[QueueScreen]）が付け、行本体は
- * 左スワイプの削除とタップで再生する操作だけを持つ。
+ * Apple Music のキューの行は**ジャケットと曲名とアーティストだけ**で、
+ * 再生時間も「…」も置かない。並びを見る画面なので情報を増やさない。
  */
 @Composable
-private fun QueueRow(
+private fun QueueTrackRow(
     window: Timeline.Window,
     onClick: () -> Unit,
 ) {
@@ -627,11 +631,64 @@ private fun QueueRow(
             )
         }
 
-    SongRow(
-        song = song,
-        isPlaying = false,
-        onClick = onClick,
-    )
+    QueueMetadataRow(metadata = song, onClick = onClick)
+}
+
+/** ジャケット＋曲名＋アーティストの行。履歴とキューの両方で使う。 */
+@Composable
+private fun QueueMetadataRow(
+    metadata: MediaMetadata,
+    onClick: () -> Unit,
+) {
+    val palette = applePalette()
+    val type = appleType()
+    val metrics = appleMetrics()
+    val artistNames = metadata.artists.joinToString(", ") { it.name }
+
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) { onClick() }
+                .padding(
+                    start = metrics.gutter.dp,
+                    end = metrics.sm.dp,
+                    top = metrics.sm.dp,
+                    bottom = metrics.sm.dp,
+                ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Artwork(
+            url = metadata.thumbnailUrl,
+            contentDescription = metadata.title,
+            cornerRadius = (metrics.artworkCorner - 2).coerceAtLeast(4).dp,
+            modifier = Modifier.size(46.dp),
+        )
+
+        Spacer(Modifier.width(metrics.md.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = metadata.title,
+                style = type.callout.copy(fontWeight = FontWeight.SemiBold),
+                color = palette.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (artistNames.isNotEmpty()) {
+                Text(
+                    text = artistNames,
+                    style = type.footnote,
+                    color = palette.labelSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
 }
 
 /**
@@ -651,176 +708,6 @@ private fun QueueDragHandle(modifier: Modifier = Modifier) {
             tint = palette.labelSecondary,
             modifier = Modifier.size(20.dp),
         )
-    }
-}
-
-/**
- * 画面下部の操作列。
- *
- * 上からシークバー（両端に時間）、大きな再生コントロール、
- * その下に歌詞・出力先・再生キューの3つ。
- */
-@Composable
-private fun QueueBottomBar(
-    positionMs: Long,
-    durationMs: Long,
-    isPlaying: Boolean,
-    onSeek: (Long) -> Unit,
-    onPlayPause: () -> Unit,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
-    onOpenLyrics: () -> Unit,
-) {
-    val palette = applePalette()
-    val type = appleType()
-    val metrics = appleMetrics()
-
-    val elapsed = formatDuration((positionMs / 1000L).toInt()) ?: ZERO_TIME
-    val remaining =
-        formatDuration(((durationMs - positionMs) / 1000L).toInt().coerceAtLeast(0)) ?: ZERO_TIME
-
-    Column(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(
-                    start = metrics.gutter.dp,
-                    end = metrics.gutter.dp,
-                    top = metrics.xs.dp,
-                    bottom = metrics.xs.dp,
-                ),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = elapsed,
-                style = type.footnote,
-                color = palette.labelSecondary,
-                maxLines = 1,
-            )
-            Scrubber(
-                positionMs = positionMs,
-                durationMs = durationMs,
-                onSeek = onSeek,
-                playedColor = Color.White,
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .padding(horizontal = metrics.sm.dp),
-            )
-            Text(
-                text = remaining,
-                style = type.footnote,
-                color = palette.labelSecondary,
-                maxLines = 1,
-            )
-        }
-
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .height(76.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            PlayerCircleButton(
-                onClick = onPrevious,
-                backgroundAlpha = 0f,
-                buttonSize = 56.dp,
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.skip_previous),
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(30.dp),
-                )
-            }
-
-            Spacer(Modifier.width(metrics.block.dp))
-
-            PlayerCircleButton(
-                onClick = onPlayPause,
-                backgroundAlpha = 0.18f,
-                buttonSize = 68.dp,
-            ) {
-                Icon(
-                    painter = painterResource(if (isPlaying) R.drawable.pause else R.drawable.play),
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(36.dp),
-                )
-            }
-
-            Spacer(Modifier.width(metrics.block.dp))
-
-            PlayerCircleButton(
-                onClick = onNext,
-                backgroundAlpha = 0f,
-                buttonSize = 56.dp,
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.skip_next),
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(30.dp),
-                )
-            }
-        }
-
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            PlayerCircleButton(
-                onClick = onOpenLyrics,
-                backgroundAlpha = 0f,
-                buttonSize = 44.dp,
-                contentDescription = stringResource(R.string.lyrics),
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.lyrics),
-                    contentDescription = null,
-                    tint = palette.onBackground.copy(alpha = 0.85f),
-                    modifier = Modifier.size(21.dp),
-                )
-            }
-
-            Spacer(Modifier.width(metrics.sm.dp))
-
-            Icon(
-                painter = painterResource(R.drawable.cast_output),
-                contentDescription = null,
-                tint = palette.labelSecondary,
-                modifier = Modifier.size(19.dp),
-            )
-            Spacer(Modifier.width(metrics.xs.dp))
-            Text(
-                text = stringResource(R.string.output),
-                style = type.footnote,
-                color = palette.labelSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-
-            // いま見ている画面。押しても遷移しない（現在地の表示）。
-            PlayerCircleButton(
-                onClick = { },
-                backgroundAlpha = 0f,
-                buttonSize = 44.dp,
-                contentDescription = stringResource(R.string.queue),
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.queue_music),
-                    contentDescription = null,
-                    tint = palette.accent,
-                    modifier = Modifier.size(21.dp),
-                )
-            }
-        }
     }
 }
 
@@ -887,9 +774,6 @@ private fun removeQueueWindow(
     }
     return false
 }
-
-/** 時間が未取得のときに置く文字。 */
-private const val ZERO_TIME = "0:00"
 
 /** ライトテーマへ掛ける地色の濃さ。文字が読める明度まで戻す。 */
 private const val LIGHT_SCRIM_ALPHA = 0.74f

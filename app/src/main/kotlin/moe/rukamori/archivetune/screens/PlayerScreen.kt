@@ -7,13 +7,14 @@
 
 package moe.rukamori.archivetune.screens
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,7 +28,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -47,9 +47,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -79,22 +81,33 @@ import moe.rukamori.archivetune.extensions.toMediaItem
 import moe.rukamori.archivetune.extensions.togglePlayPause
 import moe.rukamori.archivetune.viewmodels.ImmersivePlayerViewModel
 
+/** 下へこの距離だけ引くとプレイヤーを閉じる。 */
+private val DISMISS_DRAG = 110.dp
+
 /**
  * 全画面プレイヤー（Now Playing）。
  *
  * 背面はジャケットから抜いた2色のグラデーション。ジャケットが変わると
- * [androidx.compose.animation.animateColorAsState] で色が溶けて入れ替わる。
+ * [animateColorAsState] で色が溶けて入れ替わる。
  *
- * 構成は上から下へ：閉じる → 巨大なジャケット → 曲名・アーティスト（左寄せ、
- * 右に★と「…」）→ 再生時間 → 搬送3点 → 音量 → 出力先とキュー。
- * **シャッフルとリピートはここに置かない**（Apple Music と同じくキュー画面の
- * ピル型トグルに寄せる）。
+ * 組み方は Apple Music の Now Playing に合わせている。
+ *
+ *  - 上端は取っ手（下へ引くと閉じる）
+ *  - 巨大なジャケット。曲が変わるときは前後をクロスフェードさせる
+ *  - 曲名・アーティストは左寄せ、右に★と「…」
+ *  - 進行バーは白。両端に時間
+ *  - 搬送は**面を持たない無地のグリフ3つ**（前・再生・次）。中央の再生だけを大きくする。
+ *    白い円で囲むと他社のプレイヤーと同じ記号になるため、Apple Music と同じく輪郭を付けない
+ *  - 最下部に出力先（左）と歌詞・再生キュー（右）
+ *
+ * **シャッフルとリピートはここに置かない**（Apple Music と同じく、キュー画面の
+ * いちばん下にある無地アイコンの列へ寄せる）。
  *
  * 状態の読み取りは [ImmersivePlayerViewModel] に寄せている。★（お気に入り）と
  * 出力先デバイスはこの ViewModel がしか持たないため。シークと音量の**命令**は
  * 動作が確立している [LocalPlayerConnection] をそのまま通す。
  *
- * @param onDismiss 下向き矢印。プレイヤーを閉じる。
+ * @param onDismiss 下向きの取っ手。プレイヤーを閉じる。
  * @param onOpenLyrics 歌詞ボタン。
  * @param onOpenQueue キューボタン。
  */
@@ -110,6 +123,7 @@ fun PlayerScreen(
     val windowInsets = LocalPlayerAwareWindowInsets.current
     val type = appleType()
     val metrics = appleMetrics()
+    val density = LocalDensity.current
 
     // 曲メニューに渡す本体。ViewModel のモデルには曲情報が無いので接続側から読む。
     val currentSong by playerConnection.mediaMetadata.collectAsState()
@@ -189,6 +203,10 @@ fun PlayerScreen(
     // 停止中はジャケットがわずかに沈む。動いているときと同じ表情にしない。
     val artworkScale by animateFloatAsState(targetValue = if (model?.isPlaying == true) 1f else 0.965f, animationSpec = tween(260), label = "artworkScale")
 
+    // 下へ引いて閉じる。引いた量だけ画面を沈める。
+    var dismissDragPx by remember { mutableStateOf(0f) }
+    val dismissThresholdPx = with(density) { DISMISS_DRAG.toPx() }
+
     // 表示位置は、シーク先をまだプレイヤーが迎えていないときはその位置を保持する。
     val displayedPosition = pendingSeek ?: model?.positionMs ?: 0L
     val duration = model?.durationMs ?: 0L
@@ -238,28 +256,38 @@ fun PlayerScreen(
                     )
                     drawContent()
                 }
+                .graphicsLayer { translationY = dismissDragPx }
                 .windowInsetsPadding(windowInsets)
                 .padding(horizontal = metrics.gutter.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // ── 上端：閉じる（中央に寄せる。Apple Music の取っ手と同じ位置） ──
-        Row(
+        // ── 上端：取っ手。下へ引くと閉じる ─────────────────
+        Box(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .height(48.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                    .height(48.dp)
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onDragEnd = {
+                                if (dismissDragPx > dismissThresholdPx) onDismiss()
+                                dismissDragPx = 0f
+                            },
+                            onDragCancel = { dismissDragPx = 0f },
+                        ) { _, dragAmount ->
+                            dismissDragPx = (dismissDragPx + dragAmount).coerceAtLeast(0f)
+                        }
+                    },
+            contentAlignment = Alignment.Center,
         ) {
-            Spacer(Modifier.weight(1f))
             PlayerIconButton(onClick = onDismiss) {
                 Icon(
                     painter = painterResource(R.drawable.expand_more),
                     contentDescription = stringResource(R.string.close),
-                    tint = Color.White,
+                    tint = Color.White.copy(alpha = 0.85f),
                     modifier = Modifier.size(26.dp),
                 )
             }
-            Spacer(Modifier.weight(1f))
         }
 
         // ── 巨大なジャケット（画面上半分を占める） ─────────────
@@ -270,25 +298,35 @@ fun PlayerScreen(
                     .fillMaxWidth(),
             contentAlignment = Alignment.Center,
         ) {
-            Artwork(
-                url = model?.artworkUrl,
-                contentDescription = null,
+            // 曲が変わるときはジャケットを差し替えるだけでなく、前後を溶かして繋ぐ。
+            Crossfade(
+                targetState = model?.artworkUrl,
+                animationSpec = tween(420),
+                label = "artworkSwap",
                 modifier =
                     Modifier
                         .fillMaxWidth()
                         .widthIn(max = 430.dp)
-                        .aspectRatio(1f)
-                        // 影は内側に置き、外側の graphicsLayer でまとめて縮める。
-                        // 逆にすると停止中にジャケットだけ縮んで影が残り、
-                        // 周囲に暗い輪郭が残る。
-                        .graphicsLayer { scaleX = artworkScale; scaleY = artworkScale }
-                        .shadow(
-                            elevation = 14.dp,
-                            shape = RoundedCornerShape(metrics.artworkCorner.dp),
-                            ambientColor = Color.Black,
-                            spotColor = Color.Black,
-                        ),
-            )
+                        .aspectRatio(1f),
+            ) { artworkUrl ->
+                Artwork(
+                    url = artworkUrl,
+                    contentDescription = null,
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            // 影は内側に置き、外側の graphicsLayer でまとめて縮める。
+                            // 逆にすると停止中にジャケットだけ縮んで影が残り、
+                            // 周囲に暗い輪郭が残る。
+                            .graphicsLayer { scaleX = artworkScale; scaleY = artworkScale }
+                            .shadow(
+                                elevation = 14.dp,
+                                shape = RoundedCornerShape(metrics.artworkCorner.dp),
+                                ambientColor = Color.Black,
+                                spotColor = Color.Black,
+                            ),
+                )
+            }
         }
 
         // ── 曲名・アーティスト（左寄せ、右に★と「…」） ──────────
@@ -302,7 +340,7 @@ fun PlayerScreen(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = type.title3,
+                    style = type.title2,
                     color = Color.White,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -310,11 +348,11 @@ fun PlayerScreen(
                 if (artistNames.isNotEmpty()) {
                     Text(
                         text = artistNames,
-                        style = type.callout,
+                        style = type.title3,
                         color = Color.White.copy(alpha = 0.66f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 2.dp),
+                        modifier = Modifier.padding(top = 1.dp),
                     )
                 }
             }
@@ -365,7 +403,7 @@ fun PlayerScreen(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(top = metrics.md.dp),
+                    .padding(top = metrics.sm.dp),
         )
 
         Row(
@@ -389,38 +427,45 @@ fun PlayerScreen(
         }
 
         // ── 搬送3点 ───────────────────────────────────────
-        // Apple Music 同様、この行には前・再生・次の3つだけを置く。
-        // シャッフルとリピートはキュー画面のピル型トグルへ移した。
+        // Apple Music 同様、面を持たない無地のグリフだけを置く。中央の再生・
+        // 一時停止だけを大きくし、前後は控えめにする。
         Row(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .height(92.dp),
+                    .height(96.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            PlayerIconButton(onClick = { playerConnection.seekToPrevious() }) {
+            Spacer(Modifier.weight(1f))
+
+            PlayerIconButton(onClick = { playerConnection.seekToPrevious() }, size = 60.dp) {
                 Icon(
                     painter = painterResource(R.drawable.skip_previous),
                     contentDescription = stringResource(R.string.widget_previous),
                     tint = Color.White,
-                    modifier = Modifier.size(38.dp),
+                    modifier = Modifier.size(34.dp),
                 )
             }
 
-            PlayPauseButton(
+            Spacer(Modifier.width(metrics.block.dp))
+
+            PlayPauseGlyph(
                 isPlaying = model?.isPlaying == true,
                 onClick = { playerConnection.player.togglePlayPause() },
             )
 
-            PlayerIconButton(onClick = { playerConnection.seekToNext() }) {
+            Spacer(Modifier.width(metrics.block.dp))
+
+            PlayerIconButton(onClick = { playerConnection.seekToNext() }, size = 60.dp) {
                 Icon(
                     painter = painterResource(R.drawable.skip_next),
                     contentDescription = stringResource(R.string.next),
                     tint = Color.White,
-                    modifier = Modifier.size(38.dp),
+                    modifier = Modifier.size(34.dp),
                 )
             }
+
+            Spacer(Modifier.weight(1f))
         }
 
         // ── 音量 ─────────────────────────────────────────
@@ -428,21 +473,21 @@ fun PlayerScreen(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .height(44.dp),
+                    .height(36.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
                 painter = painterResource(if (volume <= 0.01f) R.drawable.volume_off else R.drawable.volume_up),
                 contentDescription = null,
-                tint = Color.White.copy(alpha = 0.55f),
-                modifier = Modifier.size(16.dp),
+                tint = Color.White.copy(alpha = 0.50f),
+                modifier = Modifier.size(15.dp),
             )
 
             Scrubber(
                 positionMs = (volume.coerceIn(0f, 1f) * 1000f).roundToLong(),
                 durationMs = 1000L,
                 onSeek = { ms -> playerConnection.player.volume = (ms / 1000f).coerceIn(0f, 1f) },
-                playedColor = Color.White,
+                playedColor = Color.White.copy(alpha = 0.85f),
                 modifier =
                     Modifier
                         .weight(1f)
@@ -452,12 +497,12 @@ fun PlayerScreen(
             Icon(
                 painter = painterResource(R.drawable.volume_up),
                 contentDescription = stringResource(R.string.volume),
-                tint = Color.White.copy(alpha = 0.55f),
-                modifier = Modifier.size(19.dp),
+                tint = Color.White.copy(alpha = 0.50f),
+                modifier = Modifier.size(18.dp),
             )
         }
 
-        // ── 出力先とキュー ────────────────────────────────
+        // ── 出力先と歌詞・キュー ───────────────────────────
         Row(
             modifier =
                 Modifier
@@ -469,8 +514,8 @@ fun PlayerScreen(
             Icon(
                 painter = painterResource(R.drawable.cast_output),
                 contentDescription = null,
-                tint = Color.White.copy(alpha = 0.60f),
-                modifier = Modifier.size(19.dp),
+                tint = Color.White.copy(alpha = 0.55f),
+                modifier = Modifier.size(17.dp),
             )
 
             Spacer(Modifier.width(metrics.sm.dp))
@@ -478,7 +523,7 @@ fun PlayerScreen(
             Text(
                 text = deviceName,
                 style = type.footnote,
-                color = Color.White.copy(alpha = 0.60f),
+                color = Color.White.copy(alpha = 0.55f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
@@ -488,17 +533,19 @@ fun PlayerScreen(
                 Icon(
                     painter = painterResource(R.drawable.lyrics),
                     contentDescription = stringResource(R.string.lyrics),
-                    tint = Color.White.copy(alpha = 0.80f),
-                    modifier = Modifier.size(21.dp),
+                    tint = Color.White.copy(alpha = 0.85f),
+                    modifier = Modifier.size(22.dp),
                 )
             }
+
+            Spacer(Modifier.width(metrics.sm.dp))
 
             PlayerIconButton(onClick = onOpenQueue) {
                 Icon(
                     painter = painterResource(R.drawable.queue_music),
                     contentDescription = stringResource(R.string.queue),
-                    tint = Color.White.copy(alpha = 0.80f),
-                    modifier = Modifier.size(21.dp),
+                    tint = Color.White,
+                    modifier = Modifier.size(23.dp),
                 )
             }
         }
@@ -528,29 +575,45 @@ fun PlayerScreen(
     }
 }
 
-/** 再生・一時停止の大きな円ボタン。白い面に濃いアイコンを載せる。 */
+/**
+ * 再生・一時停止の大きなグリフ。
+ *
+ * Apple Music と同じく**面を持たせない**。白い円で囲むと他社のプレイヤーの
+ * 記号になるため、輪郭は付けずに記号だけを大きく置く。押下時はわずかに縮めて
+ * 触れたことを返す。
+ */
 @Composable
-private fun PlayPauseButton(
+private fun PlayPauseGlyph(
     isPlaying: Boolean,
     onClick: () -> Unit,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(targetValue = if (pressed) 0.90f else 1f, animationSpec = tween(120), label = "playGlyph")
+
     Box(
         modifier =
             Modifier
-                .size(64.dp)
-                .background(Color.White, CircleShape)
+                .size(72.dp)
+                .graphicsLayer { scaleX = scale; scaleY = scale }
                 .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
+                    interactionSource = interactionSource,
                     indication = null,
                 ) { onClick() },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            painter = painterResource(if (isPlaying) R.drawable.pause else R.drawable.play),
-            contentDescription = if (isPlaying) stringResource(R.string.widget_pause) else stringResource(R.string.play),
-            tint = Color.Black,
-            modifier = Modifier.size(if (isPlaying) 30.dp else 28.dp),
-        )
+        Crossfade(
+            targetState = isPlaying,
+            animationSpec = tween(160),
+            label = "playPauseGlyph",
+        ) { playing ->
+            Icon(
+                painter = painterResource(if (playing) R.drawable.pause else R.drawable.play),
+                contentDescription = if (playing) stringResource(R.string.widget_pause) else stringResource(R.string.play),
+                tint = Color.White,
+                modifier = Modifier.size(56.dp),
+            )
+        }
     }
 }
 
@@ -558,12 +621,14 @@ private fun PlayPauseButton(
 @Composable
 private fun PlayerIconButton(
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    size: Dp = 44.dp,
     content: @Composable () -> Unit,
 ) {
     Box(
         modifier =
-            Modifier
-                .size(44.dp)
+            modifier
+                .size(size)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,

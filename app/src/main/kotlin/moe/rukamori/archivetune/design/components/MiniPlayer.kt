@@ -25,7 +25,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.RectangleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -72,7 +72,10 @@ private val PROGRESS_HEIGHT = 2.dp
 /**
  * Apple Music 風のミニプレイヤー。
  *
- * ナビゲーションバーの真上に置かれ、下端へ細い進行バーを付ける。
+ * ナビゲーションバーの真上に**画面幅いっぱいの帯**として置く。角を丸めて浮かせた
+ * 面は他社のプレイヤーの記号になるため使わない。Apple Music のタブバーと続けて
+ * 1本の操作帯に見えるよう、上端のヘアラインを進行バーと兼ねる。
+ *
  * 背景はジャケットから抜いた色を、テーマに合わせて暗く／明るく寄せたもの
  * （[rememberArtworkBackdrop]）。文字は乗った面の明るさから自動で反転する。
  *
@@ -99,7 +102,6 @@ fun MiniPlayer(
     val type = appleType()
     val metrics = appleMetrics()
     val density = LocalDensity.current
-    val shape = RoundedCornerShape(20.dp)
 
     // アートから抜いた2色。解析が終わるまでは既定の灰が入る。
     val backdrop = rememberArtworkBackdrop(
@@ -159,10 +161,10 @@ fun MiniPlayer(
                 .graphicsLayer { translationX = animatedOffsetPx },
     ) {
         Surface(
-            shape = shape,
+            shape = RectangleShape,
             color = container,
             tonalElevation = 0.dp,
-            shadowElevation = 6.dp,
+            shadowElevation = 0.dp,
         ) {
             Row(
                 modifier =
@@ -193,7 +195,7 @@ fun MiniPlayer(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
                         ) { onOpenPlayer() }
-                        .padding(start = metrics.md.dp, end = metrics.xs.dp),
+                        .padding(start = metrics.gutter.dp, end = metrics.xs.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Artwork(
@@ -249,11 +251,11 @@ fun MiniPlayer(
             }
         }
 
-        // 下端の細い進行バー。上に面の影が来るため、一番下へ敷く。
+        // 上端の細い進行バー。タブバーとの境目のヘアラインを兼ねる。
         Box(
             modifier =
                 Modifier
-                    .align(Alignment.BottomCenter)
+                    .align(Alignment.TopCenter)
                     .fillMaxWidth()
                     .height(PROGRESS_HEIGHT)
                     .background(contentColor.copy(alpha = 0.24f)),

@@ -23,7 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -139,7 +139,13 @@ fun RadioScreen(
                             LargeTitleHeader(title = title)
                         }
 
-                        items(items = state.sections, key = { it.title }) { section ->
+                        // キーは見出しではなく**位置込み**で作る。YouTube Music は
+                        // 同じ見出しのセクションを複数返すことがあり、`title` だけを
+                        // キーにすると LazyColumn が「キーが重複した」例外で落ちる。
+                        itemsIndexed(
+                            items = state.sections,
+                            key = { index, section -> "$index:${section.title}" },
+                        ) { _, section ->
                             RadioSection(
                                 section = section,
                                 onOpen = { tile -> navController.navigate(Routes.browse(tile.browseId)) },
@@ -171,7 +177,13 @@ private fun RadioSection(
             contentPadding = PaddingValues(horizontal = metrics.gutter.dp),
             horizontalArrangement = Arrangement.spacedBy(metrics.sm.dp),
         ) {
-            items(items = section.tiles, key = { it.browseId }) { tile ->
+            // タイルのキーも位置込みにする。ムード／ジャンルの一覧には同じ
+            // `browseId`（例：`FEmusic_moods_and_genres_category`）を持つ項目が
+            // 複数並ぶため、`browseId` 単体では重複して例外になる。
+            itemsIndexed(
+                items = section.tiles,
+                key = { index, tile -> "$index:${tile.browseId}" },
+            ) { _, tile ->
                 RadioTile(tile = tile, onClick = { onOpen(tile) })
             }
         }
